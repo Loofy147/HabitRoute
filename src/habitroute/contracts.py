@@ -129,6 +129,73 @@ class FixedMacro:
 
 
 @dataclass(frozen=True, slots=True)
+class PolicyActionDecision:
+    allowed: bool
+    action: str | None
+    reason: str
+    action_mass: float = 0.0
+    unclassified_mass: float = 1.0
+
+
+@dataclass(frozen=True, slots=True)
+class ReactivePolicy:
+    """Finite state-conditioned controller with conservative belief handling."""
+    actions_by_state: tuple[tuple[str, str], ...]
+    min_action_mass: float = 0.95
+    max_unclassified_mass: float = 0.01
+
+    @property
+    def kind(self) -> ControllerKind:
+        return ControllerKind.REACTIVE_POLICY
+
+    @classmethod
+    def from_mapping(
+        cls, actions_by_state: Mapping[str, str], *,
+        min_action_mass: float = 0.95, max_unclassified_mass: float = 0.01,
+    ) -> "ReactivePolicy":
+        entries = tuple(sorted((str(state), str(action)) for state, action in actions_by_state.items()))
+        return cls(entries, min_action_mass, max_unclassified_mass)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "actions_by_state", tuple(sorted(self.actions_by_state)))
+        if not self.actions_by_state:
+            raise ValueError("reactive policy requires at least one state/action rule")
+        states = [state for state, _ in self.actions_by_state]
+        if len(states) != len(set(states)):
+            raise ValueError("reactive policy has duplicate state rules")
+        if any(not state.strip() or not action.strip() for state, action in self.actions_by_state):
+            raise ValueError("reactive policy states and actions must be non-empty")
+        if not 0.0 <= self.min_action_mass <= 1.0:
+            raise ValueError("min_action_mass must be in [0, 1]")
+        if not 0.0 <= self.max_unclassified_mass <= 1.0:
+            raise ValueError("max_unclassified_mass must be in [0, 1]")
+
+    def select_action(self, belief: StateBelief) -> PolicyActionDecision:
+        """Choose only when one action covers enough belief mass; otherwise refuse."""
+        rules = dict(self.actions_by_state)
+        unclassified = belief.unknown_mass + sum(
+            probability for state, probability in belief.probabilities if state not in rules
+        )
+        if unclassified > self.max_unclassified_mass:
+            return PolicyActionDecision(False, None, "unclassified_mass_exceeded",
+                                        unclassified_mass=unclassified)
+        action_mass: dict[str, float] = {}
+        for state, probability in belief.probabilities:
+            action = rules.get(state)
+            if action is not None:
+                action_mass[action] = action_mass.get(action, 0.0) + probability
+        if not action_mass:
+            return PolicyActionDecision(False, None, "no_supported_action",
+                                        unclassified_mass=unclassified)
+        action, mass = max(action_mass.items(), key=lambda item: (item[1], item[0]))
+        if mass < self.min_action_mass:
+            return PolicyActionDecision(False, None, "ambiguous_action_distribution",
+                                        action_mass=mass, unclassified_mass=unclassified)
+        return PolicyActionDecision(True, action, "action_selected",
+                                    action_mass=mass, unclassified_mass=unclassified)
+
+
+@dataclass(frozen=True, slots=True)
 class ControllerArtifact:
     """Reference to a guarded/reactive controller that a runtime can load."""
     kind: ControllerKind
@@ -141,7 +208,7 @@ class ControllerArtifact:
             raise ValueError("controller artifact reference must be non-empty")
 
 
-Controller: TypeAlias = FixedMacro | ControllerArtifact
+Controller: TypeAlias = FixedMacro | ReactivePolicy | ControllerArtifact
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,6 +273,15 @@ class HabitSpec:
                     raise ValueError(f"macro contains disallowed actions: {sorted(disallowed)}")
             if set(self.controller.expected_states).intersection(self.safety.forbidden_states):
                 raise ValueError("macro expected path contains a forbidden state")
+        elif isinstance(self.controller, ReactivePolicy):
+            states = {state for state, _ in self.controller.actions_by_state}
+            actions = {action for _, action in self.controller.actions_by_state}
+            if states.intersection(self.safety.forbidden_states):
+                raise ValueError("reactive policy defines actions in forbidden states")
+            if self.safety.allowed_actions is not None:
+                disallowed = actions - self.safety.allowed_actions
+                if disallowed:
+                    raise ValueError(f"reactive policy contains disallowed actions: {sorted(disallowed)}")
 
     def with_version(self, version: int) -> "HabitSpec":
         return replace(self, version=version)
