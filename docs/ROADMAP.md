@@ -20,7 +20,7 @@
 - [x] Add dependency-free typed records for immutable habit versions, scopes, initiation, controllers, goals and termination metadata.
 - [x] Add fail-closed initiation evaluation: candidate retrieval cannot authorize execution.
 - [x] Add version/scope-bound empirical certificate validation with a Wilson lower confidence bound.
-- [ ] Add typed termination outcomes: success, failure, interrupted, timeout, resource limit and unknown.
+- [x] Add typed execution outcomes: success, failure, interrupted, timeout, resource limit, unknown and handoff.
 - [x] Add invariant tests for version mismatch, context mismatch, OOD belief, low evidence and macro-contract coherence.
 - [ ] Keep fixed macros as the first supported controller without limiting the schema to fixed macros.
 
