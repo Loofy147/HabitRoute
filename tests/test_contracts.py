@@ -159,5 +159,37 @@ class HabitContractTests(unittest.TestCase):
         self.assertGreater(large, small)
 
 
+
+    def test_macro_start_must_belong_to_initiation_region(self):
+        with self.assertRaises(ValueError):
+            HabitSpec(
+                habit_id="wrong-start", version=1, scope=self.scope,
+                initiation=InitiationContract(frozenset({"hall-left"})),
+                controller=FixedMacro(("forward",), ("hall", "door")),
+                termination=TerminationContract(frozenset({"door"}), max_steps=1),
+                safety=SafetyContract(),
+            )
+
+    def test_macro_terminal_must_satisfy_success_contract(self):
+        with self.assertRaises(ValueError):
+            HabitSpec(
+                habit_id="wrong-goal", version=1, scope=self.scope,
+                initiation=InitiationContract(frozenset({"hall"})),
+                controller=FixedMacro(("forward",), ("hall", "junction")),
+                termination=TerminationContract(frozenset({"door"}), max_steps=1),
+                safety=SafetyContract(),
+            )
+
+    def test_macro_must_fit_termination_budget(self):
+        with self.assertRaises(ValueError):
+            HabitSpec(
+                habit_id="too-long", version=1, scope=self.scope,
+                initiation=InitiationContract(frozenset({"hall"})),
+                controller=FixedMacro(("forward", "left"), ("hall", "junction", "door")),
+                termination=TerminationContract(frozenset({"door"}), max_steps=1),
+                safety=SafetyContract(),
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
