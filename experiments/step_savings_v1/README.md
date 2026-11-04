@@ -8,12 +8,12 @@ This directory preserves the current experimental implementation and evidence. I
 - `habit_library.py` — simulator/world and latent model implementation used by the experiment.
 - `habit_refine.py` — planner, rewiring, setup, and practice helpers restored as the previously missing dependency.
 - `test_habit_utility.py` — focused regression tests.
-- `baseline/` — pre-step-savings source retained for control comparison.
+- The usage-based `utility` policy remains in `habit_system.py` as the executable control; a separate baseline source snapshot is not yet committed.
 - `RESULTS_REPORT.md` — main capacity and repeated-change findings.
 - `SENSITIVITY_ANALYSIS.md` — coverage-weight sweep.
 - `REPEATED_CHANGE_ANALYSIS.md` — per-cycle comparisons.
 - `VERIFICATION.md` — reported verification protocol and results.
-- `*_summary.csv` and selected JSON files — summarized and per-seed experiment records.
+- The Markdown reports contain the checked-in aggregate results; raw per-seed JSON and CSV artifacts from the local experiment package are not yet committed.
 
 ## Install and test
 
