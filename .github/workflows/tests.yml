@@ -1,0 +1,29 @@
+name: tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: experiments/step_savings_v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install experiment dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile experiment modules
+        run: python -m py_compile habit_system.py habit_library.py habit_refine.py test_habit_utility.py
+      - name: Run focused tests
+        run: python -m unittest -v test_habit_utility.py
+      - name: Run built-in invariant self-test
+        run: python -c "import habit_system; passed, total = habit_system.selftest(); assert passed == total, f'{passed}/{total}'; print(f'{passed}/{total} assertions passed')"
