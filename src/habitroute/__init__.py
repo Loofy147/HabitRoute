@@ -7,7 +7,8 @@ from .contracts import (
     StateBelief, TerminationContract, authorize_habit,
 )
 from .machine import (
-    CostMetric, EfficiencyDecision, EfficiencyGate, HarnessProfile, HabitUseDecision,
+    CostMetric, EfficiencyDecision, EfficiencyGate, HarnessOperationResult, HarnessAdapter,
+    OperationOutcome, HarnessProfile, HabitUseDecision,
     MachineHabit, MachineHabitStatus, OperationEffect, OperationStep, PerformanceProfile,
     StateCondition, authorize_machine_habit,
 )
@@ -17,7 +18,8 @@ from .flows import (
 )
 
 __all__ = [
-    "CostMetric", "EfficiencyDecision", "EfficiencyGate", "HarnessProfile",
+    "CostMetric", "EfficiencyDecision", "EfficiencyGate", "HarnessOperationResult",
+    "HarnessAdapter", "OperationOutcome", "HarnessProfile",
     "HabitUseDecision", "MachineHabit", "MachineHabitStatus", "OperationEffect",
     "OperationStep", "PerformanceProfile", "StateCondition", "authorize_machine_habit",
     "FlowDefinition", "FlowEvent", "FlowEventKind", "FlowNode", "FlowNodeKind",
