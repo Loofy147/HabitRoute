@@ -1,73 +1,56 @@
 # HabitRoute
 
-**Evidence-backed route memory for adaptive agents.**
+**Evidence-backed adaptive skills and route memory.**
 
-HabitRoute is a research-to-engineering project for learning reusable action sequences ("habits"), verifying them against observed transitions, detecting when they become unreliable, and retaining useful routes under a bounded memory budget.
+HabitRoute is a research-to-engineering project for learning, verifying, composing and retaining reusable temporally extended behaviors in changing environments.
 
-> Current status: research prototype. The initial simulator, retention-policy experiments, tests, and evidence reports are committed. The extracted reusable Python library is not yet implemented.
+> Current status: research prototype plus a proposed habit/option specification. The experimental simulator remains the executable baseline; the reusable core is under development and is not yet a stable release.
 
-## Why it exists
+## The central design
 
-A planner can find routes in a model of the world, while a habit library can reuse routes that have already worked in the world. Reuse is valuable only while the evidence remains applicable. HabitRoute studies the lifecycle around that reuse:
+A habit is not just an action list. HabitRoute is moving toward a **versioned adaptive option** with an explicit safe initiation contract, an internal controller, semantic goal/termination conditions, safety and interruption guards, an outcome/cost model, and evidence scoped to its exact version and context.
 
-1. discover a route through execution;
-2. store the route with evidence and context;
-3. audit it adaptively;
-4. detect slips and real environmental change;
-5. revoke or quarantine invalid routes;
-6. retain routes that balance reliability, coverage, and action-step savings;
-7. fall back to planning when trusted reuse is unavailable.
+Fixed action macros remain supported for predictable, invariant sequences. Guarded and reactive controllers are needed when the correct next action depends on the current state. A goal-directed planner remains responsible for selecting skills and falling back when initiation or applicability checks fail.
+
+## Research and design
+
+- [Habit-model research review](docs/HABIT_MODEL_RESEARCH.md) — options, action-sequence formation, composability, predictive state abstraction, successor representations and non-stationarity.
+- [Habit specification v0.1](docs/HABIT_SPEC_v0.1.md) — proposed object contract, lifecycle, evidence, composition and invariants.
+- [Contradictions and gaps](docs/CONTRADICTIONS_AND_GAPS.md) — code-backed defects, severity, repairs and falsifiable tests.
+- [Architecture](docs/ARCHITECTURE.md) — target component boundaries.
+- [Roadmap](docs/ROADMAP.md) — implementation order and promotion gates.
+- [Decisions](docs/DECISIONS.md) — accepted design choices and open questions.
 
 ## Current experimental evidence
 
-The initial step-savings study compares the existing usage-based retention policy with a counterfactual action-step-savings policy.
+The initial step-savings study compared usage-based retention with counterfactual action-step-savings retention.
 
-- 12-state and 24-state simulated worlds;
+- 12-state and 24-state synthetic worlds;
 - eight paired seeds (0–7) per world;
-- noise parameter σ = 2;
-- capacity tests at 12, 20, 28, and uncapped;
+- observation noise parameter σ = 2;
+- capacity tests at 12, 20, 28 and uncapped;
 - repeated-change tests with five consecutive 30% transition-rewiring events;
 - focused tests: 10/10 passing; built-in assertions: 22/22 passing.
 
-The most consistent benefit appears at capacity 28. In the 12-state world, the step-savings policy at coverage weight 0.5 reached mean D+1 success 0.904 versus 0.513 for usage utility, with mean steps 2.908 versus 4.271. In the 24-state world, the corresponding results were 0.963 versus 0.883 and 3.254 versus 3.746.
+The strongest observed capacity-28 results favored step-savings weight 0.5 in the tested worlds. These are experiment-specific results, not statistical proof or a universal policy win. Repeated regime changes remain unresolved. The existing usage-based utility policy remains the overall default; savings is opt-in.
 
-These are experiment-specific results, not statistical proof or a universal policy win. Repeated regime changes still expose a route-quality/adaptation trade-off. The usage-based `utility` policy remains the overall default; `savings` is opt-in.
+See [the experiment report](experiments/step_savings_v1/RESULTS_REPORT.md).
 
-See [the experiment report](experiments/step_savings_v1/RESULTS_REPORT.md) and [the roadmap](docs/ROADMAP.md).
+## Repository layout
 
-## Repository map
-
-- `experiments/step_savings_v1/` — preserved simulator, usage-utility control, step-savings policy, tests, protocol, and analysis reports.
-- `docs/ARCHITECTURE.md` — target system boundaries and invariants.
-- `docs/ROADMAP.md` — sequenced engineering work and promotion gates.
-- `docs/DECISIONS.md` — explicit decisions and unresolved assumptions.
-
-The experiment code is intentionally kept separate from the future library implementation. The first engineering milestone is to extract stable interfaces without changing the experiment's behavior.
-
-## Reproduce the focused checks
-
-Requirements: Python 3.10+ and NumPy.
-
-From `experiments/step_savings_v1/`:
-
-```bash
-python -m pip install -r requirements.txt
-python -m py_compile habit_system.py habit_library.py habit_refine.py test_habit_utility.py
-python -m unittest -v test_habit_utility.py
-```
-
-Full experiment commands and environment variables are documented in the experiment README.
+- experiments/step_savings_v1/ — preserved simulator, baseline behavior, tests and reports.
+- docs/ — research, habit contract, contradictions, architecture and roadmap.
+- src/habitroute/ — target dependency-free habit contract and core, being built incrementally.
 
 ## Project principles
 
-- A route is not trusted merely because a planner predicted it.
-- A certificate is scoped evidence, not a permanent guarantee.
-- A change in world revision invalidates assumptions that depend on the old revision.
-- Slips must not be confused with persistent transition changes.
-- Library coverage and route quality are separate objectives.
-- Every optimization must be compared against retained baselines on matched seeds.
-- Failed tests, negative results, and computational costs are part of the evidence record.
+- A planner prediction is not empirical verification.
+- Unknown or out-of-distribution observations must not launch a habit by nearest-neighbor fallback.
+- A certificate is scoped empirical evidence, not a permanent guarantee or formal safety proof.
+- Transition correctness, task value and safety are separate dimensions.
+- Coverage, reliability, duration, risk, resource cost and lookup overhead remain separately measurable.
+- Failed tests, negative results, uncertainty and computational cost are part of the evidence record.
 
 ## License
 
-No license has been selected yet. Until one is added, default copyright applies; do not assume the code is available for unrestricted reuse.
+No license has been selected. Default copyright applies; do not assume unrestricted reuse.
