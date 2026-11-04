@@ -2,10 +2,27 @@ import unittest
 from dataclasses import replace
 
 from habitroute.machine import (
-    CostMetric, EfficiencyGate, HarnessProfile, MachineHabit, MachineHabitStatus,
-    OperationEffect, OperationStep, PerformanceProfile, StateCondition,
-    authorize_machine_habit,
+    CostMetric, EfficiencyGate, HarnessOperationResult, HarnessProfile,
+    MachineExecutionStatus, MachineHabit, MachineHabitStatus, OperationEffect,
+    OperationOutcome, OperationStep, PerformanceProfile, StateCondition,
+    authorize_machine_habit, execute_machine_habit,
 )
+
+
+
+
+class StubHarness:
+    def __init__(self, profile, outcomes=None):
+        self.profile = profile
+        self.outcomes = {key: list(value) for key, value in (outcomes or {}).items()}
+        self.calls = []
+
+    def invoke(self, operation, inputs, *, idempotency_key):
+        self.calls.append((operation.operation_ref, dict(inputs), idempotency_key))
+        bucket = self.outcomes.get(operation.operation_ref, [])
+        if bucket:
+            return bucket.pop(0)
+        return HarnessOperationResult(OperationOutcome.SUCCEEDED)
 
 
 class MachineHabitTests(unittest.TestCase):
@@ -154,6 +171,102 @@ class MachineHabitTests(unittest.TestCase):
         )
         self.assertEqual(authorize_machine_habit(habit, self.harness, self.state).reason,
                          "habit_not_active")
+
+
+
+    def test_harness_executes_habit_and_checks_postconditions(self):
+        harness = StubHarness(self.harness, {
+            "git.test": [HarnessOperationResult(
+                OperationOutcome.SUCCEEDED, (("checks.pass", "true"),), 120.0, 4.0
+            )]
+        })
+        result = execute_machine_habit(
+            self.habit, harness, self.state, run_id="run-machine-001"
+        )
+        self.assertEqual(result.status, MachineExecutionStatus.SUCCEEDED)
+        self.assertEqual(result.reason, "habit_completed_and_verified")
+        self.assertEqual(len(harness.calls), 3)
+        self.assertEqual(result.final_state[-1], ("checks.pass", "true"))
+
+    def test_idempotent_retry_reuses_same_idempotency_key(self):
+        habit = replace(
+            self.habit,
+            operations=(OperationStep("git.test", OperationEffect.IDEMPOTENT, max_attempts=2),),
+        )
+        harness = StubHarness(self.harness, {
+            "git.test": [
+                HarnessOperationResult(OperationOutcome.FAILED, error_code="temporary"),
+                HarnessOperationResult(OperationOutcome.SUCCEEDED, (("checks.pass", "true"),)),
+            ]
+        })
+        result = execute_machine_habit(habit, harness, self.state, run_id="run-machine-002")
+        self.assertEqual(result.status, MachineExecutionStatus.SUCCEEDED)
+        self.assertEqual(len(harness.calls), 2)
+        self.assertEqual(harness.calls[0][2], harness.calls[1][2])
+
+    def test_unknown_non_repeatable_result_requires_attention(self):
+        habit = replace(
+            self.habit,
+            operations=(OperationStep("deploy.preview", OperationEffect.NON_REPEATABLE),),
+        )
+        harness = StubHarness(self.harness, {
+            "deploy.preview": [HarnessOperationResult(OperationOutcome.UNKNOWN)]
+        })
+        result = execute_machine_habit(
+            habit, harness, self.state, run_id="run-machine-003",
+            approved_operations=frozenset({"deploy.preview"}),
+        )
+        self.assertEqual(result.status, MachineExecutionStatus.NEEDS_ATTENTION)
+        self.assertEqual(len(harness.calls), 1)
+
+    def test_protected_operation_requires_approval_before_invocation(self):
+        habit = replace(
+            self.habit,
+            operations=(OperationStep("deploy.preview", OperationEffect.NON_REPEATABLE),),
+        )
+        harness = StubHarness(self.harness)
+        result = execute_machine_habit(habit, harness, self.state, run_id="run-machine-004")
+        self.assertEqual(result.status, MachineExecutionStatus.HANDOFF)
+        self.assertEqual(result.reason, "approval_required")
+        self.assertEqual(harness.calls, [])
+
+    def test_missing_dynamic_input_binding_refuses_execution(self):
+        habit = replace(
+            self.habit,
+            operations=(OperationStep(
+                "git.test", OperationEffect.READ_ONLY,
+                input_bindings=(("revision", "$state.revision"),),
+            ),),
+        )
+        harness = StubHarness(self.harness)
+        result = execute_machine_habit(habit, harness, self.state, run_id="run-machine-005")
+        self.assertEqual(result.status, MachineExecutionStatus.HANDOFF)
+        self.assertEqual(result.reason, "input_binding_missing")
+        self.assertEqual(harness.calls, [])
+
+    def test_postcondition_failure_requires_attention(self):
+        habit = replace(
+            self.habit,
+            operations=(OperationStep("git.test", OperationEffect.IDEMPOTENT),),
+        )
+        harness = StubHarness(self.harness)
+        result = execute_machine_habit(habit, harness, self.state, run_id="run-machine-006")
+        self.assertEqual(result.status, MachineExecutionStatus.NEEDS_ATTENTION)
+        self.assertTrue(result.reason.startswith("postconditions_not_satisfied"))
+
+    def test_compensation_step_fails_closed_until_adapter_supports_it(self):
+        habit = replace(
+            self.habit,
+            operations=(OperationStep(
+                "inventory.reserve", OperationEffect.COMPENSATABLE,
+                compensation_ref="inventory.release",
+            ),),
+        )
+        harness = StubHarness(self.harness)
+        result = execute_machine_habit(habit, harness, self.state, run_id="run-machine-007")
+        self.assertEqual(result.status, MachineExecutionStatus.HANDOFF)
+        self.assertEqual(result.reason, "compensation_adapter_not_implemented")
+        self.assertEqual(harness.calls, [])
 
 
 if __name__ == "__main__":
