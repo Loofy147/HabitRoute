@@ -16,6 +16,7 @@
 - Efficiency gate using Wilson lower bounds for success and postcondition reliability, plus improvement in a declared latency/call/resource/recovery metric.
 - Fail-closed machine-habit authorization.
 - `execute_machine_habit`: invokes a sequence through the harness adapter, resolves literal or `$state.key` inputs, reuses a logical-step idempotency key across retries, collects execution records, verifies postconditions, and stops on unknown outcomes.
+- Compensatable steps explicitly hand off until a real compensation adapter exists; no rollback is simulated.
 
 ### `src/habitroute/flows.py`
 
@@ -31,6 +32,7 @@
 ## Verification
 
 - Core suites are `tests/test_contracts.py` (historical prototype), `tests/test_machine_habits.py` and `tests/test_persistent_flows.py`.
+- The full suite passed **77/77 tests** on Python 3.11, 3.12 and 3.13 at commit `090fc7c3fddbc95c7b128045fa7a20ab3dd63400`; later export/documentation changes have their own CI runs.
 - Legacy simulator tests remain under `experiments/step_savings_v1/`.
 - GitHub Actions runs Python 3.11, 3.12 and 3.13, installs the package, runs the legacy regression suite and discovers all core tests. Check the latest run on the repository Actions page for the commit-specific result.
 
