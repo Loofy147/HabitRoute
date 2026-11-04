@@ -197,4 +197,4 @@ if __name__=='__main__':
     print("\n[novel tasks, slip=0: effect of amount of practice]")
     for nt in NT:
         for mode in (MODES[1:] if not brief else ['library_chunks']):
-            mu,sd=agg(nt,mode,0.0,'novel','free');print(f"  n_train={nt:2d} {mode:15s} model_calls={mu[2]:6.2f}+-{sd[2]:4.2f} decisions={mu[4]:5.2f} chain_found={mu[6]:.2f}+-{sd[6]:.2f}"
+            mu,sd=agg(nt,mode,0.0,'novel','free');print(f"  n_train={nt:2d} {mode:15s} model_calls={mu[2]:6.2f}+-{sd[2]:4.2f} decisions={mu[4]:5.2f} chain_found={mu[6]:.2f}+-{sd[6]:.2f}")
