@@ -8,9 +8,10 @@ from .contracts import (
 )
 from .machine import (
     CostMetric, EfficiencyDecision, EfficiencyGate, HarnessOperationResult, HarnessAdapter,
+    MachineExecutionStatus, MachineHabitExecutionResult, OperationExecutionRecord,
     OperationOutcome, HarnessProfile, HabitUseDecision,
     MachineHabit, MachineHabitStatus, OperationEffect, OperationStep, PerformanceProfile,
-    StateCondition, authorize_machine_habit,
+    StateCondition, authorize_machine_habit, execute_machine_habit,
 )
 from .flows import (
     FlowDefinition, FlowEvent, FlowEventKind, FlowNode, FlowNodeKind, FlowSnapshot,
@@ -19,9 +20,11 @@ from .flows import (
 
 __all__ = [
     "CostMetric", "EfficiencyDecision", "EfficiencyGate", "HarnessOperationResult",
-    "HarnessAdapter", "OperationOutcome", "HarnessProfile",
+    "HarnessAdapter", "OperationOutcome", "HarnessProfile", "MachineExecutionStatus",
+    "MachineHabitExecutionResult", "OperationExecutionRecord",
     "HabitUseDecision", "MachineHabit", "MachineHabitStatus", "OperationEffect",
     "OperationStep", "PerformanceProfile", "StateCondition", "authorize_machine_habit",
+    "execute_machine_habit",
     "FlowDefinition", "FlowEvent", "FlowEventKind", "FlowNode", "FlowNodeKind",
     "FlowSnapshot", "FlowStatus", "JsonlFlowJournal", "PersistentFlow", "apply_flow_event",
     "AuthorizationDecision", "AuthorizationPolicy", "Certificate", "CertificateStatus",
