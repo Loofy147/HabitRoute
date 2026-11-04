@@ -73,8 +73,18 @@ class FlowNode:
     next_on_false: str | None = None
     target_version: int | None = None
     end_status: FlowStatus = FlowStatus.SUCCEEDED
+    input_bindings: tuple[tuple[str, str], ...] = ()
+    postconditions: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "input_bindings", tuple(sorted(self.input_bindings)))
+        object.__setattr__(self, "postconditions", tuple(sorted(self.postconditions)))
+        input_keys = [key for key, _ in self.input_bindings]
+        condition_keys = [key for key, _ in self.postconditions]
+        if len(input_keys) != len(set(input_keys)) or any(not key.strip() for key in input_keys):
+            raise ValueError("flow node input bindings must have unique non-empty keys")
+        if len(condition_keys) != len(set(condition_keys)) or any(not key.strip() for key in condition_keys):
+            raise ValueError("flow node postconditions must have unique non-empty keys")
         if not self.node_id.strip():
             raise ValueError("flow node ID must be non-empty")
         if self.kind in (FlowNodeKind.OPERATION, FlowNodeKind.HABIT):
