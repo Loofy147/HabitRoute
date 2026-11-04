@@ -34,7 +34,7 @@ class PersistentFlowTests(unittest.TestCase):
                                         JsonlFlowJournal(tmp), {"repo": "A"})
             self.assertEqual(flow.snapshot.status, FlowStatus.RUNNING)
             self.assertEqual(flow.current_node.node_id, "scan")
-            self.assertEqual(flow.idempotency_key, "run-001:nightly-maintenance:3:scan:1")
+            self.assertEqual(flow.idempotency_key, "run-001:nightly-maintenance:3:scan")
 
     def test_retry_preserves_idempotency_key_and_failure_branch(self):
         flow_def = definition()
