@@ -111,5 +111,53 @@ class HabitContractTests(unittest.TestCase):
             FixedMacro(("forward",), ("hall",))
 
 
+
+    def test_certificate_scope_mismatch_is_rejected(self):
+        other = ContextScope("maze-v1", "night", "latent-prototypes", "encoder-sha-1")
+        wrong_scope = Certificate(
+            "go-to-door", 2, other, CertificateStatus.VALID, 100, 98, ("run-other",),
+        )
+        d = authorize_habit(self.habit, self.belief({"hall": 1.0}), self.scope,
+                            wrong_scope, self.policy)
+        self.assertFalse(d.allowed)
+        self.assertEqual(d.reason, "certificate_scope_mismatch")
+
+    def test_macro_cannot_contain_disallowed_action(self):
+        with self.assertRaises(ValueError):
+            HabitSpec(
+                habit_id="unsafe-macro", version=1, scope=self.scope,
+                initiation=InitiationContract(frozenset({"hall"})),
+                controller=FixedMacro(("teleport",), ("hall", "door")),
+                termination=TerminationContract(frozenset({"door"}), max_steps=1),
+                safety=SafetyContract(allowed_actions=frozenset({"forward"})),
+            )
+
+    def test_macro_cannot_cross_declared_forbidden_state(self):
+        with self.assertRaises(ValueError):
+            HabitSpec(
+                habit_id="forbidden-route", version=1, scope=self.scope,
+                initiation=InitiationContract(frozenset({"hall"})),
+                controller=FixedMacro(("forward", "left"), ("hall", "lava", "door")),
+                termination=TerminationContract(frozenset({"door"}), max_steps=2),
+                safety=SafetyContract(forbidden_states=frozenset({"lava"})),
+            )
+
+    def test_controller_artifact_supports_non_macro_kinds(self):
+        from habitroute.contracts import ControllerArtifact, ControllerKind
+        artifact = ControllerArtifact(ControllerKind.REACTIVE_POLICY, "sha256:policy")
+        self.assertEqual(artifact.kind, ControllerKind.REACTIVE_POLICY)
+
+    def test_habit_versioning_does_not_mutate_existing_version(self):
+        newer = self.habit.with_version(3)
+        self.assertEqual(self.habit.version, 2)
+        self.assertEqual(newer.version, 3)
+
+    def test_lower_bound_improves_with_more_identical_success_evidence(self):
+        from habitroute.contracts import wilson_lower_bound
+        small = wilson_lower_bound(9, 10)
+        large = wilson_lower_bound(90, 100)
+        self.assertGreater(large, small)
+
+
 if __name__ == "__main__":
     unittest.main()
