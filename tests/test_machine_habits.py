@@ -186,7 +186,7 @@ class MachineHabitTests(unittest.TestCase):
         self.assertEqual(result.status, MachineExecutionStatus.SUCCEEDED)
         self.assertEqual(result.reason, "habit_completed_and_verified")
         self.assertEqual(len(harness.calls), 3)
-        self.assertEqual(result.final_state[-1], ("checks.pass", "true"))
+        self.assertEqual(dict(result.final_state)["checks.pass"], "true")
 
     def test_idempotent_retry_reuses_same_idempotency_key(self):
         habit = replace(
@@ -258,8 +258,8 @@ class MachineHabitTests(unittest.TestCase):
         habit = replace(
             self.habit,
             operations=(OperationStep(
-                "inventory.reserve", OperationEffect.COMPENSATABLE,
-                compensation_ref="inventory.release",
+                "git.test", OperationEffect.COMPENSATABLE,
+                compensation_ref="git.test.undo",
             ),),
         )
         harness = StubHarness(self.harness)
