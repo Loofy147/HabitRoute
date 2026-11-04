@@ -3,7 +3,7 @@ import unittest
 from habitroute.contracts import (
     AuthorizationPolicy, Certificate, CertificateStatus, ContextScope,
     FixedMacro, HabitLifecycle, HabitSpec, InitiationContract, SafetyContract,
-    StateBelief, TerminationContract, authorize_habit,
+    ReactivePolicy, StateBelief, TerminationContract, authorize_habit,
 )
 
 
