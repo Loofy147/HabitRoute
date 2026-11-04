@@ -1,0 +1,479 @@
+"""Event-sourced persistent flow definitions and local JSONL journal.
+
+The journal provides durable local event append/replay with a single-writer-per-run
+contract. It does not make external side effects exactly-once.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+from enum import Enum
+import json
+import os
+from pathlib import Path
+import re
+import threading
+from typing import Mapping, Protocol
+from uuid import uuid4
+
+from .machine import OperationEffect
+
+
+class FlowNodeKind(str, Enum):
+    OPERATION = "operation"
+    HABIT = "habit"
+    BRANCH = "branch"
+    WAIT = "wait"
+    END = "end"
+
+
+class FlowStatus(str, Enum):
+    CREATED = "created"
+    RUNNING = "running"
+    WAITING = "waiting"
+    PAUSED = "paused"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    NEEDS_ATTENTION = "needs_attention"
+
+
+_TERMINAL = frozenset({
+    FlowStatus.SUCCEEDED, FlowStatus.FAILED, FlowStatus.CANCELLED,
+    FlowStatus.NEEDS_ATTENTION,
+})
+
+
+class FlowEventKind(str, Enum):
+    STARTED = "started"
+    STEP_SUCCEEDED = "step_succeeded"
+    STEP_FAILED = "step_failed"
+    STEP_OUTCOME_UNKNOWN = "step_outcome_unknown"
+    BRANCH_RESOLVED = "branch_resolved"
+    WAIT_RELEASED = "wait_released"
+    PAUSED = "paused"
+    RESUMED = "resumed"
+    CANCELLED = "cancelled"
+    NEEDS_ATTENTION = "needs_attention"
+
+
+@dataclass(frozen=True, slots=True)
+class FlowNode:
+    node_id: str
+    kind: FlowNodeKind
+    target_ref: str | None = None
+    next_on_success: str | None = None
+    next_on_failure: str | None = None
+    max_attempts: int = 1
+    effect: OperationEffect = OperationEffect.READ_ONLY
+    idempotency_key_supported: bool = False
+    compensation_ref: str | None = None
+    branch_key: str | None = None
+    branch_equals: str | None = None
+    next_on_true: str | None = None
+    next_on_false: str | None = None
+    end_status: FlowStatus = FlowStatus.SUCCEEDED
+
+    def __post_init__(self) -> None:
+        if not self.node_id.strip():
+            raise ValueError("flow node ID must be non-empty")
+        if self.kind in (FlowNodeKind.OPERATION, FlowNodeKind.HABIT):
+            if not self.target_ref or not self.target_ref.strip():
+                raise ValueError("operation/habit nodes require target_ref")
+            if not self.next_on_success:
+                raise ValueError("operation/habit nodes require next_on_success")
+            if self.max_attempts < 1:
+                raise ValueError("max_attempts must be at least one")
+            if self.effect is OperationEffect.NON_REPEATABLE and self.max_attempts > 1:
+                raise ValueError("non-repeatable flow steps cannot be automatically retried")
+            if self.effect is OperationEffect.DEDUPLICATED and not self.idempotency_key_supported:
+                raise ValueError("deduplicated flow steps require idempotency-key support")
+            if self.effect is OperationEffect.COMPENSATABLE and not (
+                self.compensation_ref and self.compensation_ref.strip()
+            ):
+                raise ValueError("compensatable flow steps require compensation_ref")
+        elif self.kind is FlowNodeKind.BRANCH:
+            if not self.branch_key or self.branch_equals is None:
+                raise ValueError("branch nodes require branch_key and branch_equals")
+            if not self.next_on_true or not self.next_on_false:
+                raise ValueError("branch nodes require true and false destinations")
+        elif self.kind is FlowNodeKind.WAIT:
+            if not self.next_on_success:
+                raise ValueError("wait nodes require next_on_success")
+        elif self.kind is FlowNodeKind.END:
+            if self.end_status not in (FlowStatus.SUCCEEDED, FlowStatus.FAILED):
+                raise ValueError("end_status must be succeeded or failed")
+            if any((self.next_on_success, self.next_on_failure, self.next_on_true, self.next_on_false)):
+                raise ValueError("terminal nodes cannot have outgoing edges")
+
+
+@dataclass(frozen=True, slots=True)
+class FlowDefinition:
+    flow_id: str
+    version: int
+    start_node: str
+    nodes: tuple[FlowNode, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "nodes", tuple(self.nodes))
+        if not self.flow_id.strip() or self.version < 1 or not self.start_node.strip():
+            raise ValueError("flow identity, positive version and start node are required")
+        ids = [node.node_id for node in self.nodes]
+        if not ids or len(ids) != len(set(ids)):
+            raise ValueError("flow nodes must be non-empty with unique IDs")
+        if self.start_node not in set(ids):
+            raise ValueError("start_node does not exist")
+        known = set(ids)
+        for node in self.nodes:
+            for edge in (node.next_on_success, node.next_on_failure, node.next_on_true, node.next_on_false):
+                if edge is not None and edge not in known:
+                    raise ValueError(f"node {node.node_id} references unknown destination {edge}")
+
+    def node(self, node_id: str) -> FlowNode:
+        for node in self.nodes:
+            if node.node_id == node_id:
+                return node
+        raise KeyError(node_id)
+
+
+@dataclass(frozen=True, slots=True)
+class FlowEvent:
+    run_id: str
+    sequence: int
+    event_id: str
+    kind: FlowEventKind
+    node_id: str | None = None
+    payload: tuple[tuple[str, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "payload", tuple(sorted(self.payload)))
+        if not self.run_id.strip() or self.sequence < 1 or not self.event_id.strip():
+            raise ValueError("flow event requires run ID, positive sequence and event ID")
+        if len({key for key, _ in self.payload}) != len(self.payload):
+            raise ValueError("flow event payload keys must be unique")
+
+    def to_json(self) -> str:
+        return json.dumps({
+            "run_id": self.run_id,
+            "sequence": self.sequence,
+            "event_id": self.event_id,
+            "kind": self.kind.value,
+            "node_id": self.node_id,
+            "payload": list(self.payload),
+        }, sort_keys=True, separators=(",", ":"))
+
+    @classmethod
+    def from_json(cls, raw: str) -> "FlowEvent":
+        data = json.loads(raw)
+        return cls(
+            run_id=str(data["run_id"]),
+            sequence=int(data["sequence"]),
+            event_id=str(data["event_id"]),
+            kind=FlowEventKind(data["kind"]),
+            node_id=data.get("node_id"),
+            payload=tuple((str(k), str(v)) for k, v in data.get("payload", [])),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class FlowSnapshot:
+    run_id: str
+    flow_id: str
+    definition_version: int
+    current_node: str
+    status: FlowStatus
+    context: tuple[tuple[str, str], ...] = ()
+    attempts: tuple[tuple[str, int], ...] = ()
+    completed_nodes: tuple[str, ...] = ()
+    last_event_sequence: int = 0
+    applied_event_ids: tuple[str, ...] = ()
+    resume_status: FlowStatus | None = None
+
+    @classmethod
+    def initial(
+        cls, definition: FlowDefinition, run_id: str,
+        initial_context: Mapping[str, str] | None = None,
+    ) -> "FlowSnapshot":
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", run_id):
+            raise ValueError("run_id must be a safe 1-128 character identifier")
+        return cls(
+            run_id=run_id, flow_id=definition.flow_id,
+            definition_version=definition.version, current_node=definition.start_node,
+            status=FlowStatus.CREATED,
+            context=tuple(sorted((initial_context or {}).items())),
+        )
+
+    def context_dict(self) -> dict[str, str]:
+        return dict(self.context)
+
+    def attempt_count(self, node_id: str) -> int:
+        return dict(self.attempts).get(node_id, 0)
+
+    def idempotency_key(self) -> str:
+        attempt = self.attempt_count(self.current_node) + 1
+        return f"{self.run_id}:{self.flow_id}:{self.definition_version}:{self.current_node}:{attempt}"
+
+
+class FlowJournal(Protocol):
+    def append(self, event: FlowEvent) -> None: ...
+    def load(self, run_id: str) -> tuple[FlowEvent, ...]: ...
+
+
+class JsonlFlowJournal:
+    """Local append-only journal. Use one writer per run_id."""
+
+    def __init__(self, root: str | os.PathLike[str]) -> None:
+        self.root = Path(root)
+        self.root.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.RLock()
+
+    def _path(self, run_id: str) -> Path:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", run_id):
+            raise ValueError("unsafe run_id")
+        return self.root / f"{run_id}.jsonl"
+
+    def load(self, run_id: str) -> tuple[FlowEvent, ...]:
+        path = self._path(run_id)
+        if not path.exists():
+            return ()
+        events: list[FlowEvent] = []
+        with path.open("r", encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, start=1):
+                if not line.strip():
+                    continue
+                try:
+                    event = FlowEvent.from_json(line)
+                except Exception as exc:
+                    raise ValueError(f"corrupt flow journal at line {line_number}") from exc
+                if event.run_id != run_id:
+                    raise ValueError(f"journal run_id mismatch at line {line_number}")
+                expected = len(events) + 1
+                if event.sequence != expected:
+                    raise ValueError(f"journal sequence gap at line {line_number}")
+                events.append(event)
+        return tuple(events)
+
+    def append(self, event: FlowEvent) -> None:
+        with self._lock:
+            path = self._path(event.run_id)
+            existing = self.load(event.run_id)
+            for prior in existing:
+                if prior.event_id == event.event_id:
+                    if prior == event:
+                        return
+                    raise ValueError("event_id reused with different event content")
+            expected = len(existing) + 1
+            if event.sequence != expected:
+                raise ValueError(f"expected event sequence {expected}, got {event.sequence}")
+            payload = (event.to_json() + "\n").encode("utf-8")
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            try:
+                written = os.write(fd, payload)
+                if written != len(payload):
+                    raise OSError("short journal write")
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+
+
+def _settle_at_node(
+    definition: FlowDefinition, snapshot: FlowSnapshot, node_id: str,
+) -> FlowSnapshot:
+    node = definition.node(node_id)
+    if node.kind is FlowNodeKind.END:
+        return replace(snapshot, current_node=node_id, status=node.end_status)
+    status = FlowStatus.WAITING if node.kind is FlowNodeKind.WAIT else FlowStatus.RUNNING
+    return replace(snapshot, current_node=node_id, status=status)
+
+
+def apply_flow_event(
+    definition: FlowDefinition, snapshot: FlowSnapshot, event: FlowEvent,
+) -> FlowSnapshot:
+    """Pure deterministic event reducer; duplicate event IDs are idempotent."""
+    if event.run_id != snapshot.run_id:
+        raise ValueError("event belongs to another flow run")
+    if snapshot.flow_id != definition.flow_id or snapshot.definition_version != definition.version:
+        raise ValueError("snapshot is pinned to a different flow definition")
+    if event.event_id in snapshot.applied_event_ids:
+        return snapshot
+    if event.sequence != snapshot.last_event_sequence + 1:
+        raise ValueError("flow event sequence is not contiguous")
+    if snapshot.status in _TERMINAL:
+        raise ValueError("cannot apply new events to a terminal flow")
+    payload = dict(event.payload)
+    updated = snapshot
+
+    if event.kind is FlowEventKind.STARTED:
+        if snapshot.status is not FlowStatus.CREATED or event.node_id != definition.start_node:
+            raise ValueError("invalid flow start event")
+        updated = replace(snapshot, status=FlowStatus.RUNNING,
+                          context=tuple(sorted(payload.items())))
+    elif event.kind is FlowEventKind.STEP_SUCCEEDED:
+        if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
+            raise ValueError("success event does not match current flow node")
+        node = definition.node(snapshot.current_node)
+        if node.kind not in (FlowNodeKind.OPERATION, FlowNodeKind.HABIT):
+            raise ValueError("only operation/habit nodes can complete as a step")
+        context = snapshot.context_dict()
+        context.update(payload)
+        updated = replace(
+            snapshot, context=tuple(sorted(context.items())),
+            completed_nodes=snapshot.completed_nodes + (node.node_id,),
+        )
+        updated = _settle_at_node(definition, updated, node.next_on_success)
+    elif event.kind is FlowEventKind.STEP_FAILED:
+        if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
+            raise ValueError("failure event does not match current flow node")
+        node = definition.node(snapshot.current_node)
+        if node.kind not in (FlowNodeKind.OPERATION, FlowNodeKind.HABIT):
+            raise ValueError("only operation/habit nodes can fail as a step")
+        attempts = snapshot.attempt_count(node.node_id) + 1
+        counts = dict(snapshot.attempts)
+        counts[node.node_id] = attempts
+        updated = replace(snapshot, attempts=tuple(sorted(counts.items())))
+        if attempts < node.max_attempts:
+            updated = replace(updated, status=FlowStatus.RUNNING)
+        elif node.next_on_failure is not None:
+            updated = _settle_at_node(definition, updated, node.next_on_failure)
+        else:
+            updated = replace(updated, status=FlowStatus.FAILED)
+    elif event.kind is FlowEventKind.STEP_OUTCOME_UNKNOWN:
+        if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
+            raise ValueError("unknown outcome does not match current flow node")
+        updated = replace(snapshot, status=FlowStatus.NEEDS_ATTENTION)
+    elif event.kind is FlowEventKind.BRANCH_RESOLVED:
+        if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
+            raise ValueError("branch event does not match current flow node")
+        node = definition.node(snapshot.current_node)
+        if node.kind is not FlowNodeKind.BRANCH:
+            raise ValueError("current node is not a branch")
+        if node.branch_key not in snapshot.context_dict():
+            raise ValueError("branch key is missing from flow context")
+        actual = snapshot.context_dict()[node.branch_key]
+        expected_result = "true" if actual == node.branch_equals else "false"
+        if payload.get("result") != expected_result:
+            raise ValueError("branch result does not match recorded context")
+        destination = node.next_on_true if expected_result == "true" else node.next_on_false
+        updated = _settle_at_node(definition, snapshot, destination)
+    elif event.kind is FlowEventKind.WAIT_RELEASED:
+        if snapshot.status is not FlowStatus.WAITING or event.node_id != snapshot.current_node:
+            raise ValueError("wait release does not match current wait node")
+        node = definition.node(snapshot.current_node)
+        if node.kind is not FlowNodeKind.WAIT:
+            raise ValueError("current node is not a wait")
+        updated = _settle_at_node(definition, snapshot, node.next_on_success)
+    elif event.kind is FlowEventKind.PAUSED:
+        if snapshot.status not in (FlowStatus.RUNNING, FlowStatus.WAITING):
+            raise ValueError("only running/waiting flows can be paused")
+        updated = replace(snapshot, status=FlowStatus.PAUSED, resume_status=snapshot.status)
+    elif event.kind is FlowEventKind.RESUMED:
+        if snapshot.status is not FlowStatus.PAUSED or snapshot.resume_status is None:
+            raise ValueError("flow is not paused")
+        updated = replace(snapshot, status=snapshot.resume_status, resume_status=None)
+    elif event.kind is FlowEventKind.CANCELLED:
+        updated = replace(snapshot, status=FlowStatus.CANCELLED, resume_status=None)
+    elif event.kind is FlowEventKind.NEEDS_ATTENTION:
+        updated = replace(snapshot, status=FlowStatus.NEEDS_ATTENTION, resume_status=None)
+    else:
+        raise ValueError(f"unsupported flow event {event.kind}")
+
+    return replace(
+        updated,
+        last_event_sequence=event.sequence,
+        applied_event_ids=snapshot.applied_event_ids + (event.event_id,),
+    )
+
+
+class PersistentFlow:
+    """Flow run that commits events before exposing updated in-memory state."""
+
+    def __init__(
+        self, definition: FlowDefinition, snapshot: FlowSnapshot, journal: FlowJournal,
+    ) -> None:
+        self.definition = definition
+        self.snapshot = snapshot
+        self.journal = journal
+
+    @classmethod
+    def start(
+        cls, definition: FlowDefinition, run_id: str, journal: FlowJournal,
+        initial_context: Mapping[str, str] | None = None,
+    ) -> "PersistentFlow":
+        initial = FlowSnapshot.initial(definition, run_id, initial_context)
+        flow = cls(definition, initial, journal)
+        flow._commit(FlowEventKind.STARTED, definition.start_node, initial_context or {})
+        return flow
+
+    @classmethod
+    def resume(
+        cls, definition: FlowDefinition, run_id: str, journal: FlowJournal,
+    ) -> "PersistentFlow":
+        events = journal.load(run_id)
+        snapshot = FlowSnapshot.initial(definition, run_id)
+        for event in events:
+            snapshot = apply_flow_event(definition, snapshot, event)
+        if not events:
+            raise ValueError("no persisted events for flow run")
+        return cls(definition, snapshot, journal)
+
+    @property
+    def idempotency_key(self) -> str:
+        return self.snapshot.idempotency_key()
+
+    @property
+    def current_node(self) -> FlowNode:
+        return self.definition.node(self.snapshot.current_node)
+
+    def _commit(
+        self, kind: FlowEventKind, node_id: str | None = None,
+        payload: Mapping[str, str] | None = None, event_id: str | None = None,
+    ) -> FlowSnapshot:
+        event = FlowEvent(
+            run_id=self.snapshot.run_id,
+            sequence=self.snapshot.last_event_sequence + 1,
+            event_id=event_id or uuid4().hex,
+            kind=kind,
+            node_id=node_id,
+            payload=tuple(sorted((payload or {}).items())),
+        )
+        candidate = apply_flow_event(self.definition, self.snapshot, event)
+        self.journal.append(event)
+        self.snapshot = candidate
+        return candidate
+
+    def succeed_step(self, outputs: Mapping[str, str] | None = None) -> FlowSnapshot:
+        return self._commit(FlowEventKind.STEP_SUCCEEDED, self.snapshot.current_node, outputs)
+
+    def fail_step(self, reason: str) -> FlowSnapshot:
+        return self._commit(FlowEventKind.STEP_FAILED, self.snapshot.current_node, {"reason": reason})
+
+    def mark_outcome_unknown(self, reason: str) -> FlowSnapshot:
+        return self._commit(
+            FlowEventKind.STEP_OUTCOME_UNKNOWN, self.snapshot.current_node, {"reason": reason}
+        )
+
+    def resolve_branch(self) -> FlowSnapshot:
+        node = self.current_node
+        if node.kind is not FlowNodeKind.BRANCH:
+            raise ValueError("current node is not a branch")
+        context = self.snapshot.context_dict()
+        if node.branch_key not in context:
+            raise ValueError("branch key is missing")
+        result = "true" if context[node.branch_key] == node.branch_equals else "false"
+        return self._commit(FlowEventKind.BRANCH_RESOLVED, node.node_id, {"result": result})
+
+    def release_wait(self) -> FlowSnapshot:
+        return self._commit(FlowEventKind.WAIT_RELEASED, self.snapshot.current_node)
+
+    def pause(self) -> FlowSnapshot:
+        return self._commit(FlowEventKind.PAUSED, self.snapshot.current_node)
+
+    def resume(self) -> FlowSnapshot:
+        return self._commit(FlowEventKind.RESUMED, self.snapshot.current_node)
+
+    def cancel(self, reason: str = "cancelled") -> FlowSnapshot:
+        return self._commit(FlowEventKind.CANCELLED, self.snapshot.current_node, {"reason": reason})
+
+    def needs_attention(self, reason: str) -> FlowSnapshot:
+        return self._commit(
+            FlowEventKind.NEEDS_ATTENTION, self.snapshot.current_node, {"reason": reason}
+        )
