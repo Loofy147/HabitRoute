@@ -501,8 +501,10 @@ class PersistentFlow:
     def release_wait(self) -> FlowSnapshot:
         return self._commit(FlowEventKind.WAIT_RELEASED, self.snapshot.current_node)
 
-    def pause(self) -> FlowSnapshot:
-        return self._commit(FlowEventKind.PAUSED, self.snapshot.current_node)
+    def pause(self, reason: str = "requested") -> FlowSnapshot:
+        return self._commit(
+            FlowEventKind.PAUSED, self.snapshot.current_node, {"$meta.reason": reason}
+        )
 
     def resume(self) -> FlowSnapshot:
         return self._commit(FlowEventKind.RESUMED, self.snapshot.current_node)
