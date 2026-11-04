@@ -191,5 +191,49 @@ class HabitContractTests(unittest.TestCase):
             )
 
 
+
+    def test_reactive_policy_branches_on_observed_state(self):
+        policy = ReactivePolicy.from_mapping({"state-a": "left", "state-b": "right"})
+        a = policy.select_action(self.belief({"state-a": 0.99, "state-b": 0.01}))
+        b = policy.select_action(self.belief({"state-a": 0.01, "state-b": 0.99}))
+        self.assertTrue(a.allowed)
+        self.assertEqual(a.action, "left")
+        self.assertTrue(b.allowed)
+        self.assertEqual(b.action, "right")
+
+    def test_reactive_policy_refuses_ambiguous_branch_belief(self):
+        policy = ReactivePolicy.from_mapping({"state-a": "left", "state-b": "right"})
+        d = policy.select_action(self.belief({"state-a": 0.5, "state-b": 0.5}))
+        self.assertFalse(d.allowed)
+        self.assertIsNone(d.action)
+        self.assertEqual(d.reason, "ambiguous_action_distribution")
+
+    def test_reactive_policy_refuses_unknown_mass(self):
+        policy = ReactivePolicy.from_mapping({"state-a": "left"})
+        d = policy.select_action(self.belief({"state-a": 0.98}, unknown=0.02))
+        self.assertFalse(d.allowed)
+        self.assertEqual(d.reason, "unclassified_mass_exceeded")
+
+    def test_habit_rejects_reactive_actions_outside_safety_allowlist(self):
+        with self.assertRaises(ValueError):
+            HabitSpec(
+                habit_id="unsafe-reactive", version=1, scope=self.scope,
+                initiation=InitiationContract(frozenset({"state-a"})),
+                controller=ReactivePolicy.from_mapping({"state-a": "teleport"}),
+                termination=TerminationContract(frozenset({"door"}), max_steps=3),
+                safety=SafetyContract(allowed_actions=frozenset({"forward"})),
+            )
+
+    def test_habit_rejects_reactive_rules_in_forbidden_states(self):
+        with self.assertRaises(ValueError):
+            HabitSpec(
+                habit_id="forbidden-reactive", version=1, scope=self.scope,
+                initiation=InitiationContract(frozenset({"hall"})),
+                controller=ReactivePolicy.from_mapping({"lava": "forward"}),
+                termination=TerminationContract(frozenset({"door"}), max_steps=3),
+                safety=SafetyContract(forbidden_states=frozenset({"lava"})),
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
