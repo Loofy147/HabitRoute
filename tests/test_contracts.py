@@ -193,7 +193,7 @@ class HabitContractTests(unittest.TestCase):
 
 
     def test_reactive_policy_branches_on_observed_state(self):
-        policy = ReactivePolicy.from_mapping({"state-a": "left", "state-b": "right"})
+        policy = ReactivePolicy.from_mapping({"state-a": "left", "state-b": "right"}, representation_id=self.scope.representation_id, representation_version=self.scope.representation_version)
         a = policy.select_action(self.belief({"state-a": 0.99, "state-b": 0.01}))
         b = policy.select_action(self.belief({"state-a": 0.01, "state-b": 0.99}))
         self.assertTrue(a.allowed)
@@ -202,14 +202,14 @@ class HabitContractTests(unittest.TestCase):
         self.assertEqual(b.action, "right")
 
     def test_reactive_policy_refuses_ambiguous_branch_belief(self):
-        policy = ReactivePolicy.from_mapping({"state-a": "left", "state-b": "right"})
+        policy = ReactivePolicy.from_mapping({"state-a": "left", "state-b": "right"}, representation_id=self.scope.representation_id, representation_version=self.scope.representation_version)
         d = policy.select_action(self.belief({"state-a": 0.5, "state-b": 0.5}))
         self.assertFalse(d.allowed)
         self.assertIsNone(d.action)
         self.assertEqual(d.reason, "ambiguous_action_distribution")
 
     def test_reactive_policy_refuses_unknown_mass(self):
-        policy = ReactivePolicy.from_mapping({"state-a": "left"})
+        policy = ReactivePolicy.from_mapping({"state-a": "left"}, representation_id=self.scope.representation_id, representation_version=self.scope.representation_version)
         d = policy.select_action(self.belief({"state-a": 0.98}, unknown=0.02))
         self.assertFalse(d.allowed)
         self.assertEqual(d.reason, "unclassified_mass_exceeded")
@@ -219,7 +219,7 @@ class HabitContractTests(unittest.TestCase):
             HabitSpec(
                 habit_id="unsafe-reactive", version=1, scope=self.scope,
                 initiation=InitiationContract(frozenset({"state-a"})),
-                controller=ReactivePolicy.from_mapping({"state-a": "teleport"}),
+                controller=ReactivePolicy.from_mapping({"state-a": "teleport"}, representation_id=self.scope.representation_id, representation_version=self.scope.representation_version),
                 termination=TerminationContract(frozenset({"door"}), max_steps=3),
                 safety=SafetyContract(allowed_actions=frozenset({"forward"})),
             )
@@ -229,10 +229,23 @@ class HabitContractTests(unittest.TestCase):
             HabitSpec(
                 habit_id="forbidden-reactive", version=1, scope=self.scope,
                 initiation=InitiationContract(frozenset({"hall"})),
-                controller=ReactivePolicy.from_mapping({"lava": "forward"}),
+                controller=ReactivePolicy.from_mapping({"lava": "forward"}, representation_id=self.scope.representation_id, representation_version=self.scope.representation_version),
                 termination=TerminationContract(frozenset({"door"}), max_steps=3),
                 safety=SafetyContract(forbidden_states=frozenset({"lava"})),
             )
+
+
+
+    def test_reactive_policy_rejects_representation_version_mismatch(self):
+        policy = ReactivePolicy.from_mapping(
+            {"state-a": "left"},
+            representation_id=self.scope.representation_id,
+            representation_version=self.scope.representation_version,
+        )
+        other = ContextScope("maze-v1", "daylight", "latent-prototypes", "encoder-sha-2")
+        d = policy.select_action(self.belief({"state-a": 1.0}, scope=other))
+        self.assertFalse(d.allowed)
+        self.assertEqual(d.reason, "representation_version_mismatch")
 
 
 if __name__ == "__main__":
