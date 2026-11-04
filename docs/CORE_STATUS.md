@@ -1,53 +1,52 @@
 # HabitRoute Core — implementation status
 
-**Status date:** 2026-11-04
-**Version:** 0.1.0.dev0 (experimental; not a stable API)
+**Status date:** 2026-11-04  
+**Package:** `habitroute` 0.1.0.dev0 (experimental; not a stable production runtime)
 
-## Implemented
+## Canonical machine-habit core
 
-Location: src/habitroute/
+### `src/habitroute/machine.py`
 
-- Immutable, typed records for context scope and representation version.
-- State belief with explicit unknown mass and normalized probability validation.
-- Initiation region gate with minimum in-region mass and maximum unknown mass.
-- Fixed macro schema with action sequence, expected state checkpoints and an independent checkpoint-confidence threshold.
-- Finite state-conditioned reactive policy that chooses an action only when one action covers enough current belief mass; refuses ambiguous, unsupported or representation-mismatched beliefs.
-- Typed artifact references for guarded-sequence and goal-conditioned controller kinds (not yet executable).
-- Goal/termination metadata with success states and maximum step budget.
-- Safety metadata with forbidden states and optional allowed-action set.
-- Per-habit-version, per-scope empirical certificate record.
-- Authorization policy with minimum evidence count and Wilson lower confidence bound.
-- Fail-closed authorization reasons for lifecycle, environment/context, representation, habit identity/version, certificate scope/status, insufficient evidence, reliability and initiation failures.
-- Structural checks that a fixed macro starts inside its initiation region, ends in a declared success state, fits its step budget, uses allowed actions and avoids declared forbidden states.
-- Structural checks that a reactive policy's representation matches the habit scope, avoids forbidden states and uses only allowed actions.
+- Immutable machine-habit identity and version.
+- Harness/environment/context scope and trigger/precondition predicates.
+- Operation steps with read-only, idempotent, deduplicated, compensatable and non-repeatable effect classes.
+- Explicit idempotency-key and compensation requirements.
+- Harness profile with operation allowlist, approval-required operations, maximum attempts and compensation capability.
+- Provider-neutral `HarnessAdapter` protocol and typed operation result.
+- Baseline/candidate performance profiles tied to the same cohort and sample count.
+- Efficiency gate using Wilson lower bounds for success and postcondition reliability, plus a declared latency/call/resource/recovery cost improvement threshold.
+- Fail-closed habit authorization for lifecycle, harness/version, environment/context, trigger, preconditions, efficiency evidence, operation allowlist, approval and retry limits.
 
-## What authorization means
+### `src/habitroute/flows.py`
 
-authorize_habit returns permission to attempt a habit only when the supplied belief, context, habit version, and empirical certificate satisfy the configured contract. Candidate retrieval is separate and must not itself trigger execution.
-
-The Wilson lower bound is an empirical statistical gate over a caller-supplied success count. Its interpretation assumes reasonably comparable Bernoulli trials within the declared scope; correlated, adaptive or regime-mixed executions can invalidate that interpretation. The current defaults (20 trials and an 0.80 lower bound) are engineering placeholders, not calibrated safety thresholds. The bound is not a guarantee of future behavior or a formal safety proof.
-
-## Not implemented yet
-
-- No environment-owning executor: `ExecutionSession` is only an adapter-facing controller state machine and does not call `step()` on an environment.
-- No learned reactive policy discovery/update; the current reactive controller is a finite state/action table. Guarded-sequence and goal-conditioned controllers are references only.
-- No independent evidence ledger, signed evidence refs, or verification that caller-supplied trial counts came from genuine runs.
-- No automatic candidate/probation/active promotion workflow.
-- No certificate expiry scheduler, change detector, revalidation engine or revocation propagation.
-- No online belief estimator; adapters must supply a valid normalized belief.
-- No probabilistic transition model or Markov-abstraction test.
-- No terminal-outcome to successor-initiation composition calculation.
-- No independent safety monitor or tested fallback controller. `ExecutionSession` checks declared forbidden states and action allowlists, but does not establish formal safety, evaluate the optional numeric risk budget, or enforce every custom failure/interruption condition.
-- No adapter to the old simulator yet.
-- The caller must interrupt the session when a live certificate is revoked or a non-step resource budget is exhausted; the session does not poll a certificate registry.
+- Immutable, versioned flow definitions and typed operation, habit, branch, wait and terminal nodes.
+- Habit nodes pin an exact machine-habit version.
+- Event reducer with contiguous sequence validation and duplicate-event idempotency.
+- `PersistentFlow` run controller for start, step success/failure, unknown outcome, branch resolution, wait release, pause/resume, cancellation and needs-attention escalation.
+- Stable per-run/per-flow-version/per-node/per-attempt idempotency keys.
+- Local append-only JSONL journal that validates sequence continuity and fsyncs committed events.
+- Recovery by replaying the journal into the deterministic flow reducer.
+- Single-writer-per-run contract.
 
 ## Verification
 
-- Local focused core tests: 39/39 passing.
-- Local compileall: passing.
-- Local editable install using the pyproject metadata: passing.
-- GitHub Actions: tests run on Python 3.11, 3.12 and 3.13; the latest run is linked from the repository Actions tab. This status record must be updated if the newest commit changes the test result.
+- Canonical machine-habit and persistent-flow tests are in `tests/test_machine_habits.py` and `tests/test_persistent_flows.py`.
+- The earlier option/route contract tests remain in `tests/test_contracts.py` as historical prototype regression coverage.
+- Legacy simulator tests remain under `experiments/step_savings_v1/`.
+- GitHub Actions runs Python 3.11, 3.12 and 3.13, installs the package, runs the legacy regression suite and discovers all core tests. See the latest repository Actions run for the commit-specific result.
+
+## What is not implemented
+
+- No production adapter currently invokes external APIs, CLIs, repositories, scripts or agent runtimes; `HarnessAdapter` is an interface only.
+- No central habit registry, trace-ingestion pipeline, automatic habit discovery or automated promotion workflow. Baseline and candidate performance profiles are supplied by the caller.
+- No end-to-end habit runner that executes all `OperationStep` records and independently verifies postconditions. The current core defines the contract and authorization boundary.
+- No external SQL/event-store adapter, multi-writer lease, distributed lock or clustered workflow execution. `JsonlFlowJournal` is a local filesystem journal with one writer per run.
+- No snapshot compaction; recovery replays the complete event journal.
+- No timer scheduler, callback receiver or approval service; a caller invokes wait-release/branch decisions.
+- No transaction spanning the flow journal and an external operation. Exactly-once external effects are not guaranteed. Adapters need idempotency/deduplication/compensation or manual reconciliation.
+- No automatic migration of a running flow to a new definition or habit version.
+- The earlier `contracts.py` and `execution.py` remain an RL-style route/option prototype and are not the canonical machine-habit model.
 
 ## Immediate next build
 
-Add an append-only execution evidence event interface, then compose terminal-outcome distributions with successor initiation regions. After that, build a simulator adapter and test it against the legacy harness while ensuring nearest-prototype lookup cannot bypass the initiation gate.
+Implement a concrete harness adapter and a small end-to-end worker that (1) loads a pinned flow run, (2) resolves a machine habit, (3) authorizes it under the current harness profile, (4) invokes one operation with the flow's idempotency key, (5) validates outputs/postconditions, and (6) commits the flow event before advancing. Add a crash-after-side-effect-before-acknowledgement test.
