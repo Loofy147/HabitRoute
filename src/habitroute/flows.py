@@ -228,8 +228,8 @@ class FlowSnapshot:
         return dict(self.attempts).get(node_id, 0)
 
     def idempotency_key(self) -> str:
-        attempt = self.attempt_count(self.current_node) + 1
-        return f"{self.run_id}:{self.flow_id}:{self.definition_version}:{self.current_node}:{attempt}"
+        """Stable key for this logical run/node across retries and replay."""
+        return f"{self.run_id}:{self.flow_id}:{self.definition_version}:{self.current_node}"
 
 
 class FlowJournal(Protocol):
