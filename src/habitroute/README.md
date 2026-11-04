@@ -4,9 +4,9 @@ Dependency-free domain contracts for versioned reusable habits.
 
 ## Current scope
 
-This first core slice defines immutable habit versions, context and representation scope, a belief-aware initiation gate, fixed-macro/controller references, termination and safety contracts, and version-scoped empirical certificates.
+This first core slice defines immutable habit versions, context and representation scope, a belief-aware initiation gate, fixed macros, a finite state-conditioned reactive policy, references for future controller kinds, termination and safety contracts, and version-scoped empirical certificates.
 
-It does not yet execute habits, learn reactive policies, estimate beliefs, prove safety, compose options, persist evidence, or integrate with the legacy simulator. Those are explicit follow-up tasks.
+It does not yet run a full environment execution loop, learn reactive policies, estimate beliefs, prove safety, compose options, persist evidence, or integrate with the legacy simulator. Guarded-sequence and goal-conditioned policies are currently artifact references only. Those are explicit follow-up tasks.
 
 ## Install from a checkout
 
