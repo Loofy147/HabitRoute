@@ -1,220 +1,113 @@
-# HabitRoute Habit Specification v0.1
+# Machine Habit Specification v0.2
 
-**Status:** proposed target contract; not yet implemented.
-**Purpose:** define what a reusable habit is before changing the execution engine.
+**Status:** corrected canonical target model.  
+**Supersedes:** the earlier option/skill framing of this specification.  
+**Scope:** efficient recurring machine operations, not human habit psychology or reinforcement-learning skills.
 
 ## 1. Definition
 
-A HabitRoute habit is a versioned, temporally extended controller that may start only when declared conditions hold, acts toward a declared subgoal, and terminates by success, failure, interruption, timeout, or resource exhaustion. Its applicability is supported by evidence scoped to an environment/context and state-representation version.
+A machine habit is a reusable, versioned operation pattern that performs a recurring machine task more efficiently than its baseline while preserving the required outputs, side effects, postconditions and operational constraints.
 
-The theoretical foundation is the Options abstraction:
+A habit is an **execution optimization artifact**. It does not own long-lived workflow progress. Persistent flows own progress; execution harnesses own operation control and verification.
 
-~~~text
-option = (initiation_set, intra_option_policy, termination_condition)
-~~~
-
-HabitRoute extends that abstraction:
-
-~~~text
-habit = (identity, scope, initiation, controller, goal, termination, safety, effects, costs, evidence, recovery)
-~~~
-
-A habit is not an episode, a route, a planner result, or a certificate. Those are separate entities.
-
-## 2. Controller types
-
-The schema must support multiple controllers. The first implementation can run only fixed macros, but the schema must not force every habit to be an action tuple.
-
-| Type | Behavior | Appropriate when |
-|---|---|---|
-| fixed_macro | Fixed action sequence with observation checkpoints | The same next action remains appropriate across the plausible states inside the initiation region |
-| guarded_sequence | Sequence with condition-based branches and interrupts | A small number of observed branches recur |
-| reactive_policy | Chooses each action from current observation/belief and context | The correct next action depends on current state |
-| goal_conditioned_policy | Policy receives a target/subgoal parameter | One controller can reach a family of compatible targets |
-
-A macro is valid only where its internal action choices are sufficiently invariant. If plausible successor states require different actions, a fixed sequence is the wrong controller; use a branch or feedback policy.
-
-## 3. Minimum immutable habit version
-
-Each published habit version is immutable. A changed controller, initiation boundary, termination rule, representation, or safety contract creates a new version.
+## 2. Minimum MachineHabit record
 
 | Field | Required | Meaning |
 |---|---|---|
-| habit_id / version | yes | Stable identity and immutable version |
-| controller_kind | yes | fixed_macro, guarded_sequence, reactive_policy, or goal_conditioned_policy |
-| controller_ref | yes | Serialized controller or content-addressed artifact |
-| environment_scope | yes | Environment, task mode and context predicates where evidence applies |
-| representation_id/version | yes | Exact observation/state abstraction required by this version |
-| initiation_contract | yes | Safe start region, preconditions and uncertainty threshold |
-| goal_contract | yes | Semantic goal or terminal region, not merely a prototype ID |
-| termination_contract | yes | Success, failure, interrupt, timeout and resource conditions |
-| safety_contract | yes | State/action constraints and allowed risk envelope |
-| effect_model | yes | Distribution over terminal outcomes and duration |
-| cost_model | yes | Action, time, resource, lookup, audit and recovery cost estimates |
-| evidence_refs | yes | Immutable execution/test evidence references |
-| provenance | yes | Parent trajectories/skills, algorithm, code, model and dataset revisions |
-| lifecycle_status | yes | candidate, probation, active, at_risk, quarantined, revoked or superseded |
+| `habit_id`, `version` | yes | Stable identity and immutable version |
+| `harness_id`, `harness_version` | yes | Execution environment/contract where validated |
+| `environment_scope` | yes | Environment, machine, tenant, project or context constraints |
+| `trigger_contract` | yes | Recurring operation/task signature that makes the habit a candidate |
+| `input_contract` | yes | Required inputs, parameter types and binding rules |
+| `preconditions` | yes | Required state before execution |
+| `operation_pattern` | yes | Ordered operations, parameter bindings, and permitted branches |
+| `postconditions` | yes | Required output and side-effect conditions |
+| `idempotency_contract` | yes | Read-only/idempotent/deduplicated/compensatable/non-repeatable semantics |
+| `resource_limits` | yes | Time, calls, compute, money and safety limits |
+| `fallback_ref` | yes | Baseline procedure or safe escalation |
+| `efficiency_evidence` | yes | Matched baseline/candidate outcomes and cost distributions |
+| `provenance` | yes | Source traces, run IDs, code, data, dependency and harness revisions |
+| `lifecycle` | yes | candidate, verified, active, at_risk, quarantined, revoked or superseded |
 
-Do not replace these dimensions with one uninspectable confidence score.
+Published habit versions are immutable. A change in operation sequence, parameters, preconditions, postconditions, harness contract or dependency assumptions creates a new version.
 
-## 4. Initiation and representation
+## 3. Applicability
 
-### 4.1 Fail closed
+Candidate retrieval is not authorization. A habit is applicable only if the exact required environment/harness version, trigger signature, input schema and preconditions match.
 
-A habit is executable only if the observed state or state belief satisfies its safe initiation contract. For probabilistic state inference:
+Unknown context, missing preconditions, incompatible harness, changed operation contracts or missing evidence must fail closed to the baseline flow or a declared escalation path.
 
-~~~text
-P(current_belief in safe_initiation_region | observation, context) >= initiation_threshold
-~~~
+## 4. Efficiency proof
 
-Nearest-neighbor lookup may suggest candidate habits, but it must not authorize execution. If the representation says unknown, out-of-distribution, ambiguous, or below threshold, the selector must fall back to planning or a separately validated recovery controller.
+Each candidate is compared with the baseline on a matched cohort and identical harness policy.
 
-### 4.2 Predictive sufficiency
+Promotion requires:
 
-A state abstraction must preserve information needed to predict the outcomes that the habit and its safety monitor rely on. If the same abstract cue and action lead to different outcomes due to hidden state, history, context, or stochasticity, one deterministic successor is not a valid invariant.
+- minimum sample size;
+- required output/side-effect contract pass rate;
+- success-rate regression within an explicit tolerance;
+- improvement in at least one predeclared cost metric;
+- separate reporting of latency, operation calls, compute, tokens, external spend, retries, recovery and human intervention;
+- reproducible environment, code, input cohort and harness provenance.
 
-The engine should support:
-- deterministic transitions when justified by evidence and environment contract;
-- stochastic outcome distributions when transitions vary;
-- belief/context-augmented state when the current abstraction aliases decision-relevant situations;
-- explicit unknown/OOD results.
+A habit is not better solely because it uses fewer steps. If it saves API calls but increases failure recovery or external cost, the complete result must expose that trade-off.
 
-Encoder or prototype changes require a new representation version. Existing habit versions must be suspended until a validated migration or revalidation is available.
+## 5. Operation pattern
 
-## 5. Execution and termination
+Initial controller forms:
 
-Each controller step receives a fresh observation unless the controller's observation schedule has itself been justified and certified. Fixed macros still require runtime guards and interruption points.
+- **Sequence:** fixed, parameterized sequence of operation calls.
+- **Guarded sequence:** conditional branches selected by recorded/validated state.
+- **Reusable subflow:** an invocation of another immutable flow fragment.
+- **Execution shortcut:** a validated reuse of an intermediate result or cached computation, with freshness and invalidation conditions.
 
-Termination causes are distinct:
+These are machine procedure forms, not learned human-like behaviors. No general-purpose policy-learning framework is required to represent them.
 
-- SUCCESS: semantic goal contract satisfied;
-- FAILURE: expected behavior contradicted or continuation is no longer valid;
-- INTERRUPTED: safety monitor, context change, higher-level policy or user interrupts;
-- TIMEOUT: time or primitive-step budget exhausted;
-- RESOURCE_LIMIT: energy, memory or other declared budget exhausted;
-- UNKNOWN: current state cannot be classified within the accepted representation envelope.
+## 6. Safety and side effects
 
-A mismatch is evidence of a discrepancy, not automatically proof of a regime change. It may be caused by a slip, observation noise, state aliasing, model error, or persistent transition change.
+Every operation is classified as read-only, idempotent, deduplicated by idempotency key, compensatable, or non-repeatable. A harness may not automatically retry non-repeatable side effects unless a verified deduplication/compensation mechanism exists.
 
-## 6. Composition
+Execution always checks the harness operation allowlist, approvals, time/resource limits, preconditions and postconditions. A habit cannot weaken the harness's controls.
 
-A route is an ordered or graph-structured composition of habit versions. Exact endpoint-prototype equality is too brittle as the long-term composition contract.
+## 7. Persistent flow boundary
 
-Link habit A to habit B only when A's terminal-outcome distribution is compatible with B's safe initiation region:
+A machine habit is a reusable component that a persistent flow may invoke. The flow owns:
 
-~~~text
-P(terminal_outcome_of_A is inside safe_initiation_of_B | context) >= composition_threshold
-~~~
+- immutable flow definition version;
+- run ID and cursor;
+- durable input/context and completed outputs;
+- event sequence and checkpoint history;
+- waiting, approval, retry, pause, resume and cancellation state;
+- exact habit versions used by each node.
 
-Use a conservative confidence bound for this gate, not only a point estimate. Every link records the A and B versions, scope, compatibility evidence, uncertainty, and fallback.
+Resumption must not silently switch a running flow to a new habit or flow-definition version. Such changes require an explicit migration or new run.
 
-High-level route planning must account for the duration and outcome distribution of each option. A route is not optimal merely because it uses fewer options.
+## 8. Certificate
 
-## 7. Evidence and certificate
+A machine-habit certificate identifies the exact habit version, harness/environment scope, input cohort, correctness gate, efficiency evidence, dependencies, issue time and revocation reason. It is empirical evidence of measured applicability and efficiency, not a formal correctness proof unless a separate formal verification method is supplied.
 
-A certificate is an empirical applicability attestation, not a formal safety proof unless a separate formal-verification process establishes that claim.
+## 9. Invariants
 
-It applies to one exact habit version and declares:
-- habit_id and habit_version;
-- controller and safety-contract hashes;
-- environment/context scope and revision;
-- state-representation ID/version;
-- initiation region and tested operating envelope;
-- goal/termination contract;
-- run/evidence references and provenance;
-- success, failure, interruption and timeout outcomes;
-- duration/cost distribution;
-- calibrated reliability/risk estimate and uncertainty;
-- issue, expiry, suspension and revocation conditions.
+1. A habit cannot execute outside its declared harness/environment/input scope.
+2. A habit cannot weaken harness approvals, allowlists, safety or resource limits.
+3. A habit is promoted only after correctness/quality and efficiency gates pass.
+4. The baseline remains available for fallback and paired evaluation.
+5. Habit versions and their evidence are immutable; revocation is a new lifecycle event.
+6. A persistent flow pins its own definition and exact habit versions used.
+7. A checkpoint is committed before the flow advances beyond a side-effecting operation.
+8. Retries obey operation idempotency/deduplication/compensation semantics.
+9. Replaying flow history does not repeat already-committed external side effects.
+10. Efficiency dimensions remain individually observable.
+11. All traces and evidence carry enough provenance to reproduce the comparison.
 
-A context-local change must not erase valid historical evidence for an unrelated context. A new certificate is required for a new habit version or scope.
+## 10. Promotion gates
 
-## 8. Evidence ledger
-
-Keep an append-only execution/event ledger separate from mutable indexes and derived summaries. At minimum, each event records:
-
-- run/event ID and logical time;
-- habit ID/version and controller step;
-- context and representation version;
-- initiation confidence and relevant state features;
-- action selected and predicted outcome distribution;
-- observed outcome and observation confidence;
-- termination cause and safety-monitor result;
-- task reward, duration, resource and recovery cost;
-- change-detector evidence and decision;
-- code, model, dataset and task-schedule provenance.
-
-Summary counts and posterior estimates must be reproducible from this ledger.
-
-## 9. Lifecycle and admission
-
-Recommended lifecycle:
-
-~~~text
-CANDIDATE -> PROBATION -> ACTIVE -> AT_RISK -> QUARANTINED -> REVALIDATING -> ACTIVE
-                                  |                                  |
-                                  +----------> REVOKED <-------------+
-~~~
-
-Admission rules:
-
-1. A candidate comes from observed experience or an explicit discovery process.
-2. A planner prediction alone does not make a candidate trusted.
-3. Probation requires executed evidence that satisfies initiation and goal contracts.
-4. Promotion requires sufficient context coverage and a calibrated lower confidence bound appropriate to task criticality.
-5. A single successful start/end pair does not certify a whole region.
-
-Quarantine on a strong change signal, repeated predictive contradictions, context/representation mismatch, goal-contract failure, or safety/resource violation. Preserve all old evidence. Reactivation requires a new scoped validation result.
-
-## 10. Discovery and segmentation
-
-Do not turn every contiguous subsequence of every successful path into an equally selectable habit. A length-L path can generate L(L+1)/2 overlapping records, increasing memory and lookup load without guaranteeing additional reusable behavior.
-
-Discover candidate skill boundaries at:
-- stable subgoal/landmark regions;
-- points where action choice changes or branches;
-- points where prediction uncertainty rises;
-- regions from which the same continuation works across varied successor states;
-- reusable behavior boundaries with repeated evidence.
-
-Track episode memory, transition evidence, habit definitions and certificates separately. They have different lookup, retention and provenance needs.
-
-## 11. Cost and value
-
-Keep these measures separate before any weighted score is used:
-- primitive action count;
-- elapsed-time and option-duration distribution;
-- resource/energy usage;
-- task reward/goal value;
-- probability and severity of failure;
-- expected interruption and recovery cost;
-- safety/constraint risk;
-- planning, lookup and audit computation;
-- memory and maintenance cost.
-
-The current cost len(actions) + lambda_per_habit remains a control. The long-term route objective should expose task-dependent weights and report each cost component instead of silently equating shorter action count with lower total cost.
-
-## 12. Non-negotiable invariants
-
-1. No habit executes unless the initiation contract passes.
-2. Unknown/OOD observations do not authorize habits by nearest-neighbor fallback.
-3. Every running habit is interruptible under its declared safety, context, failure and budget guards.
-4. Planner predictions are not empirical verification.
-5. Certificates refer to exact immutable habit versions and explicit scopes.
-6. Old evidence is retained; context-local invalidation does not erase unrelated evidence.
-7. Deterministic single-successor invariants are used only when the environment and abstraction justify them.
-8. Composition requires measured terminal-to-initiation compatibility.
-9. Dominance proofs use only currently admissible, sufficiently reliable replacement behavior.
-10. Experiments record code, representation, environment, seed, context and task/policy versions.
-
-## 13. Promotion gates
-
-- [ ] OOD initiation tests fail closed.
-- [ ] Hidden-state aliasing cannot create false deterministic certificates.
-- [ ] At least one stochastic transition benchmark is supported.
-- [ ] Fixed macro and reactive option are compared on branch and non-branch tasks.
-- [ ] Composition uses terminal-region compatibility and uncertainty bounds.
-- [ ] Certificates are immutable, per-habit-version and scope-aware.
-- [ ] Pruning cannot use invalid habits as dominance witnesses.
-- [ ] Slip, burst noise, regime change and representation drift are evaluated separately.
-- [ ] Existing experiment suite remains reproducible as a legacy baseline.
+- [ ] A habit passes on matched baseline/candidate inputs.
+- [ ] Required output and postcondition equivalence passes.
+- [ ] At least one target cost improves beyond the declared margin.
+- [ ] Reliability is not degraded beyond the declared tolerance.
+- [ ] Non-idempotent operations cannot be blindly retried.
+- [ ] Context/harness/version mismatches force fallback.
+- [ ] A flow run can recover from a persisted checkpoint without repeating committed operations.
+- [ ] Replaying the same event history yields identical control state.
+- [ ] Harness fault injection covers timeout, duplicate delivery, partial completion and dependency outage.
