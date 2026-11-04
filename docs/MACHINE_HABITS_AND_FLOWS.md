@@ -62,7 +62,7 @@ It owns progress, not the habit. It retains:
 - append-only execution events and provenance;
 - pause, resume, cancellation and recovery state.
 
-A flow may pause and resume after a process restart or deployment. It may select a different habit version on a future run, but an active run must pin the flow definition and record the exact habit version it used for every step.
+A flow may pause and resume after a process restart or deployment. It may select a different habit version on a future run, but an active run pins the flow definition and each habit node pins the exact habit version it uses.
 
 ## 3. Relationship
 
@@ -175,7 +175,11 @@ Replay reconstructs the flow's control state from committed events. It must not 
 9. Quarantine or revoke the affected habit when its context, harness, dependency or postconditions change.
 10. Feed new traces back into discovery without mutating historical evidence.
 
-## 8. What the earlier prototype contributes
+## 8. What the current implementation contributes
+
+The canonical package now includes a machine-habit/harness policy model in `src/habitroute/machine.py` and an event-sourced persistent-flow definition, reducer, run controller and local JSONL journal in `src/habitroute/flows.py`. These are initial contracts and control-plane primitives. A production HarnessAdapter implementation and a worker that invokes actual operations are still future work. See `docs/CORE_STATUS.md`.
+
+## 9. What the earlier prototype contributes
 
 The existing `experiments/step_savings_v1/` remains valuable as a narrow machine-memory experiment: it tests verified transition-sequence reuse, adaptive audit, route pruning, capacity and action-step savings in a synthetic world.
 
@@ -183,7 +187,7 @@ The later `src/habitroute/contracts.py` and `execution.py` were drafted using an
 
 The original result that usage-based retention can preserve detours while step-savings can improve some capacity-limited routes remains relevant. It does not yet demonstrate real API/tool workflow efficiency or durability.
 
-## 9. Research basis and interpretation
+## 10. Research basis and interpretation
 
 ### Harness engineering
 
@@ -209,7 +213,7 @@ Source: https://docs.camunda.io/docs/components/best-practices/development/deali
 
 AWS's durable execution guidance likewise explains that retry/replay may repeat side effects and recommends idempotency mechanisms. This is why HabitRoute must record operation semantics and idempotency keys instead of promising exactly-once external effects.
 
-Source: https://docs.aws.amazon.com/durable-execution/sdk/latest/userguide/idempotency.html
+Source: https://docs.aws.amazon.com/durable-execution/patterns/best-practices/idempotency/
 
 ### What is engineering inference
 
