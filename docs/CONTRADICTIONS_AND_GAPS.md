@@ -1,12 +1,14 @@
-# HabitRoute contradictions and gaps
+# Legacy synthetic route experiment: contradictions and gaps
 
 **Date:** 2026-11-04
 **Basis:** current main-branch experiment implementation and external research.
-**Purpose:** preserve what the code actually does, distinguish it from assumptions, and define falsifiable repairs.
+**Purpose:** preserve what the legacy `experiments/step_savings_v1/` code actually does, distinguish it from its assumptions, and define falsifiable repairs.
+
+**Scope warning:** this is a review of the synthetic transition-route prototype only. It is not the canonical machine-habit specification. The canonical model is Machine Habit + Execution Harness + Persistent Flow; see `docs/MACHINE_HABITS_AND_FLOWS.md`.
 
 Severity: Critical = can authorize out-of-scope execution or false trust; High = can break correctness, composition or adaptation; Medium = weakens generality or economics; Open = requires measurement.
 
-## Critical contradictions
+## Critical contradictions in the legacy route prototype
 
 ### C-01 — OOD observations can still launch a habit
 
