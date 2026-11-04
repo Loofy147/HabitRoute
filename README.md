@@ -1,58 +1,56 @@
 # HabitRoute
 
-**Evidence-backed adaptive skills and route memory.**
+**Efficient machine habits, controlled by harnesses, carried by persistent flows.**
 
-HabitRoute is a research-to-engineering project for learning, verifying, composing and retaining reusable temporally extended behaviors in changing environments.
+HabitRoute is a research-to-engineering project for discovering, verifying, optimizing and reusing recurring machine-operation patterns. A machine habit is not a human habit and not an RL skill: it is an execution pattern that must preserve required results while reducing a measurable cost.
 
-> Current status: research prototype plus a proposed habit/option specification. The experimental simulator remains the executable baseline; the reusable core is under development and is not yet a stable release.
+## Canonical model
 
-## The central design
+- **Machine Habit:** reusable optimized operation pattern with triggers, inputs, preconditions, steps, postconditions, side-effect semantics and baseline-vs-candidate efficiency evidence.
+- **Execution Harness:** controlled environment wrapper for capabilities, approvals, budgets, operation invocation, validation, tracing, idempotency and recovery.
+- **Persistent Flow:** durable orchestration definition and version-pinned run instance with events, checkpoints, branches, waits, retries, pause/resume and recovery.
 
-A habit is not just an action list. HabitRoute is moving toward a **versioned adaptive option** with an explicit safe initiation contract, an internal controller, semantic goal/termination conditions, safety and interruption guards, an outcome/cost model, and evidence scoped to its exact version and context.
+A flow owns progress. A habit owns reuse/optimization. A harness owns the execution boundary. See [the machine-habit and flow architecture](docs/MACHINE_HABITS_AND_FLOWS.md).
 
-Fixed action macros remain supported for predictable, invariant sequences. Guarded and reactive controllers are needed when the correct next action depends on the current state. A goal-directed planner remains responsible for selecting skills and falling back when initiation or applicability checks fail.
+## Current implementation
+
+- `src/habitroute/machine.py` — machine habit, harness profile, operation-effect semantics and efficiency gate.
+- `src/habitroute/flows.py` — versioned flow definitions, event reducer, persistent run controller and local append-only JSONL journal.
+- `src/habitroute/contracts.py` and `execution.py` — earlier RL-style route/option prototype retained for historical comparison; not canonical.
+- `experiments/step_savings_v1/` — preserved synthetic transition-route and step-savings experiment.
 
 ## Research and design
 
-- [Habit-model research review](docs/HABIT_MODEL_RESEARCH.md) — options, action-sequence formation, composability, predictive state abstraction, successor representations and non-stationarity.
-- [Habit specification v0.1](docs/HABIT_SPEC_v0.1.md) — proposed object contract, lifecycle, evidence, composition and invariants.
-- [Contradictions and gaps](docs/CONTRADICTIONS_AND_GAPS.md) — code-backed defects, severity, repairs and falsifiable tests.
-- [Core implementation status](docs/CORE_STATUS.md) — what the first dependency-free core enforces and what it does not.
-- [Architecture](docs/ARCHITECTURE.md) — target component boundaries.
-- [Roadmap](docs/ROADMAP.md) — implementation order and promotion gates.
-- [Decisions](docs/DECISIONS.md) — accepted design choices and open questions.
+- [Machine habits, harnesses and persistent flows](docs/MACHINE_HABITS_AND_FLOWS.md)
+- [Machine Habit Specification v0.2](docs/HABIT_SPEC_v0.1.md)
+- [Research review](docs/HABIT_MODEL_RESEARCH.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Contradictions in the legacy route experiment](docs/CONTRADICTIONS_AND_GAPS.md)
+- [Core status](docs/CORE_STATUS.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Decisions](docs/DECISIONS.md)
 
-## Current experimental evidence
+## Verification principle
 
-The initial step-savings study compared usage-based retention with counterfactual action-step-savings retention.
+A habit is not promoted because it is shorter. Baseline and candidate must use a comparable input cohort and harness; output/postcondition reliability must be preserved within a declared tolerance; and at least one predeclared cost metric must improve. Other costs and quality measures remain visible.
 
-- 12-state and 24-state synthetic worlds;
-- eight paired seeds (0–7) per world;
-- observation noise parameter σ = 2;
-- capacity tests at 12, 20, 28 and uncapped;
-- repeated-change tests with five consecutive 30% transition-rewiring events;
-- legacy experiment tests: 10/10 focused tests and 22/22 built-in assertions;
-- new habit-contract tests: 27/27, including belief-aware initiation, scoped certificates, macro consistency and reactive branching.
+## Persistent execution principle
 
-The strongest observed capacity-28 results favored step-savings weight 0.5 in the tested worlds. These are experiment-specific results, not statistical proof or a universal policy win. Repeated regime changes remain unresolved. The existing usage-based utility policy remains the overall default; savings is opt-in.
+The local flow journal is append-only and fsyncs events before the in-memory flow state advances. It uses a single-writer-per-run contract. This does not guarantee exactly-once external side effects: operation adapters still require idempotency, deduplication, compensation or manual reconciliation according to their side-effect class.
 
-See [the experiment report](experiments/step_savings_v1/RESULTS_REPORT.md).
+## Legacy experiment evidence
 
-## Repository layout
+The original simulator studies 12-state and 24-state worlds, capacity-limited memory, audit, pruning, slips and rewiring. Its results remain experiment-specific; they do not yet demonstrate real API/tool workflow savings or crash-safe orchestration.
 
-- experiments/step_savings_v1/ — preserved simulator, baseline behavior, tests and reports.
-- docs/ — research, habit contract, contradictions, architecture and roadmap.
-- src/habitroute/ — target dependency-free habit contract and core, being built incrementally.
+## Install and test
 
-## Project principles
+~~~bash
+python -m pip install -e .
+python -m unittest discover -s tests -v
+~~~
 
-- A planner prediction is not empirical verification.
-- Unknown or out-of-distribution observations must not launch a habit by nearest-neighbor fallback.
-- A certificate is scoped empirical evidence, not a permanent guarantee or formal safety proof.
-- Transition correctness, task value and safety are separate dimensions.
-- Coverage, reliability, duration, risk, resource cost and lookup overhead remain separately measurable.
-- Failed tests, negative results, uncertainty and computational cost are part of the evidence record.
+Python 3.11+; core modules use the standard library only. The legacy simulator tests install NumPy separately through `experiments/step_savings_v1/requirements.txt`.
 
 ## License
 
-No license has been selected. Default copyright applies; do not assume unrestricted reuse.
+No license has been selected. Default copyright applies.
