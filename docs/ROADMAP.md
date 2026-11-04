@@ -12,26 +12,26 @@
 - [x] Correct the product definition: machine execution optimization, not human habits or RL skills.
 - [x] Separate Machine Habit, Execution Harness and Persistent Flow.
 - [x] Define scope, triggers, operation patterns, postconditions, idempotency, baseline comparison and promotion gates.
-- [ ] Implement a dependency-free MachineHabit model and harness authorization.
-- [ ] Implement an efficiency evaluator using matched baseline/candidate cohorts.
-- [ ] Add tests for wrong harness/scope, failed postconditions, inadequate evidence and no efficiency gain.
+- [x] Implement a dependency-free MachineHabit model and harness authorization.
+- [x] Implement an efficiency evaluator using matched baseline/candidate cohorts and reliability lower bounds.
+- [x] Add tests for wrong harness/scope, failed trigger/preconditions, approval, side-effect semantics, inadequate evidence and no efficiency gain.
 
 **Gate:** no habit can become active without passing the declared correctness and efficiency gates in its harness scope.
 
 ## P2 — Persistent flow foundation
 
-- [ ] Define immutable flow definitions and version-pinned run instances.
-- [ ] Add append-only events and serializable checkpoints.
-- [ ] Add sequence-checked single-writer persistence interface.
-- [ ] Add pause/resume, wait/approval, branch, retry, cancellation and needs-attention states.
-- [ ] Define per-operation idempotency/compensation semantics.
-- [ ] Prove replay rebuilds identical control state without repeating committed operations.
+- [x] Define immutable flow definitions and version-pinned run instances; habit nodes pin an exact habit version.
+- [x] Add append-only JSONL events and deterministic replay; snapshot compaction remains open.
+- [x] Add sequence-checked local single-writer journal interface with fsync.
+- [x] Add pause/resume, wait release, branch, bounded retry, cancellation and needs-attention states.
+- [x] Define per-operation idempotency/deduplication/compensation/non-repeatable semantics and stable attempt keys.
+- [x] Test event replay rebuilds identical control state; external side-effect deduplication remains the adapter's responsibility.
 
-**Gate:** kill/restart fault-injection tests recover from the last committed checkpoint and cannot duplicate a protected side effect.
+**Gate:** kill/restart fault-injection tests recover from the last committed journal event; external side-effect deduplication is not yet implemented.
 
 ## P3 — Harness architecture
 
-- [ ] Define a provider-neutral harness protocol.
+- [x] Define a provider-neutral HarnessAdapter protocol and typed operation outcomes.
 - [ ] Add environment/capability fingerprinting, allowlists, approval gates and budgets.
 - [ ] Add input/output validation, independent postcondition checks and structured tracing.
 - [ ] Add operation adapters for scripts, APIs, repositories, files and agent runtimes.
