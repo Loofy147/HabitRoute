@@ -141,6 +141,8 @@ class PolicyActionDecision:
 class ReactivePolicy:
     """Finite state-conditioned controller with conservative belief handling."""
     actions_by_state: tuple[tuple[str, str], ...]
+    representation_id: str
+    representation_version: str
     min_action_mass: float = 0.95
     max_unclassified_mass: float = 0.01
 
@@ -150,14 +152,18 @@ class ReactivePolicy:
 
     @classmethod
     def from_mapping(
-        cls, actions_by_state: Mapping[str, str], *,
-        min_action_mass: float = 0.95, max_unclassified_mass: float = 0.01,
+        cls, actions_by_state: Mapping[str, str], *, representation_id: str,
+        representation_version: str, min_action_mass: float = 0.95,
+        max_unclassified_mass: float = 0.01,
     ) -> "ReactivePolicy":
         entries = tuple(sorted((str(state), str(action)) for state, action in actions_by_state.items()))
-        return cls(entries, min_action_mass, max_unclassified_mass)
+        return cls(entries, representation_id, representation_version,
+                   min_action_mass, max_unclassified_mass)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "actions_by_state", tuple(sorted(self.actions_by_state)))
+        if not self.representation_id.strip() or not self.representation_version.strip():
+            raise ValueError("reactive policy requires a representation identity/version")
         if not self.actions_by_state:
             raise ValueError("reactive policy requires at least one state/action rule")
         states = [state for state, _ in self.actions_by_state]
@@ -172,6 +178,11 @@ class ReactivePolicy:
 
     def select_action(self, belief: StateBelief) -> PolicyActionDecision:
         """Choose only when one action covers enough belief mass; otherwise refuse."""
+        if (belief.representation_id, belief.representation_version) != (
+            self.representation_id, self.representation_version
+        ):
+            return PolicyActionDecision(False, None, "representation_version_mismatch",
+                                        unclassified_mass=belief.unknown_mass)
         rules = dict(self.actions_by_state)
         unclassified = belief.unknown_mass + sum(
             probability for state, probability in belief.probabilities if state not in rules
@@ -274,6 +285,10 @@ class HabitSpec:
             if set(self.controller.expected_states).intersection(self.safety.forbidden_states):
                 raise ValueError("macro expected path contains a forbidden state")
         elif isinstance(self.controller, ReactivePolicy):
+            if (self.controller.representation_id, self.controller.representation_version) != (
+                self.scope.representation_id, self.scope.representation_version
+            ):
+                raise ValueError("reactive policy representation must match habit scope")
             states = {state for state, _ in self.controller.actions_by_state}
             actions = {action for _, action in self.controller.actions_by_state}
             if states.intersection(self.safety.forbidden_states):
