@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 
 from habitroute.machine import (
     CostMetric, EfficiencyGate, HarnessProfile, MachineHabit, MachineHabitStatus,
@@ -71,9 +72,10 @@ class MachineHabitTests(unittest.TestCase):
         self.assertEqual(d.reason, "precondition_not_satisfied")
 
     def test_rejects_operation_outside_harness_allowlist(self):
-        bad = MachineHabit(
-            **{**self.habit.__dict__, "operations": (OperationStep("shell.rm-root"),)}
-        )
+        bad = replace(self.habit, operations=(OperationStep("shell.rm-root"),))
+        d = authorize_machine_habit(bad, self.harness, self.state)
+        self.assertFalse(d.eligible)
+        self.assertEqual(d.reason, "operation_not_allowed")
 
     def test_requires_approval_for_protected_operation(self):
         habit = MachineHabit(
