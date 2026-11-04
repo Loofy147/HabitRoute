@@ -13,7 +13,8 @@ def definition():
         "nightly-maintenance", 3, "scan",
         (
             FlowNode("scan", FlowNodeKind.OPERATION, "repo.scan", "branch",
-                     max_attempts=2, effect=OperationEffect.IDEMPOTENT),
+                     next_on_failure="manual", max_attempts=2,
+                     effect=OperationEffect.IDEMPOTENT),
             FlowNode("branch", FlowNodeKind.BRANCH, branch_key="scan.result",
                      branch_equals="clean", next_on_true="wait", next_on_false="manual"),
             FlowNode("wait", FlowNodeKind.WAIT, next_on_success="refresh"),
@@ -101,7 +102,7 @@ class PersistentFlowTests(unittest.TestCase):
             flow.succeed_step({"scan.result": "clean"})
             flow.resolve_branch()
             before = flow.snapshot
-            reopened = PersistentFlow.resume(definition(), "run-008", JsonlFlowJournal(tmp))
+            reopened = PersistentFlow.restore(definition(), "run-008", JsonlFlowJournal(tmp))
             self.assertEqual(reopened.snapshot, before)
             self.assertEqual(reopened.snapshot.status, FlowStatus.WAITING)
 
