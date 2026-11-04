@@ -333,7 +333,7 @@ def apply_flow_event(
         if node.kind not in (FlowNodeKind.OPERATION, FlowNodeKind.HABIT):
             raise ValueError("only operation/habit nodes can complete as a step")
         context = snapshot.context_dict()
-        context.update(payload)
+        context.update({key: value for key, value in payload.items() if not key.startswith("$meta.")})
         updated = replace(
             snapshot, context=tuple(sorted(context.items())),
             completed_nodes=snapshot.completed_nodes + (node.node_id,),
@@ -358,7 +358,10 @@ def apply_flow_event(
     elif event.kind is FlowEventKind.STEP_OUTCOME_UNKNOWN:
         if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
             raise ValueError("unknown outcome does not match current flow node")
-        updated = replace(snapshot, status=FlowStatus.NEEDS_ATTENTION)
+        context = snapshot.context_dict()
+        context.update({key: value for key, value in payload.items() if not key.startswith("$meta.")})
+        updated = replace(snapshot, status=FlowStatus.NEEDS_ATTENTION,
+                          context=tuple(sorted(context.items())))
     elif event.kind is FlowEventKind.BRANCH_RESOLVED:
         if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
             raise ValueError("branch event does not match current flow node")
@@ -391,7 +394,11 @@ def apply_flow_event(
     elif event.kind is FlowEventKind.CANCELLED:
         updated = replace(snapshot, status=FlowStatus.CANCELLED, resume_status=None)
     elif event.kind is FlowEventKind.NEEDS_ATTENTION:
-        updated = replace(snapshot, status=FlowStatus.NEEDS_ATTENTION, resume_status=None)
+        context = snapshot.context_dict()
+        context.update({key: value for key, value in payload.items()
+                        if not key.startswith("$meta.")})
+        updated = replace(snapshot, status=FlowStatus.NEEDS_ATTENTION,
+                          context=tuple(sorted(context.items())), resume_status=None)
     else:
         raise ValueError(f"unsupported flow event {event.kind}")
 
@@ -459,15 +466,26 @@ class PersistentFlow:
         self.snapshot = candidate
         return candidate
 
-    def succeed_step(self, outputs: Mapping[str, str] | None = None) -> FlowSnapshot:
-        return self._commit(FlowEventKind.STEP_SUCCEEDED, self.snapshot.current_node, outputs)
+    def succeed_step(
+        self, outputs: Mapping[str, str] | None = None,
+        metadata: Mapping[str, str] | None = None,
+    ) -> FlowSnapshot:
+        payload = dict(outputs or {})
+        payload.update({f"$meta.{key}": value for key, value in (metadata or {}).items()})
+        return self._commit(FlowEventKind.STEP_SUCCEEDED, self.snapshot.current_node, payload)
 
-    def fail_step(self, reason: str) -> FlowSnapshot:
-        return self._commit(FlowEventKind.STEP_FAILED, self.snapshot.current_node, {"reason": reason})
+    def fail_step(self, reason: str, metadata: Mapping[str, str] | None = None) -> FlowSnapshot:
+        payload = {"$meta.reason": reason}
+        payload.update({f"$meta.{key}": value for key, value in (metadata or {}).items()})
+        return self._commit(FlowEventKind.STEP_FAILED, self.snapshot.current_node, payload)
 
-    def mark_outcome_unknown(self, reason: str) -> FlowSnapshot:
+    def mark_outcome_unknown(
+        self, reason: str, metadata: Mapping[str, str] | None = None,
+    ) -> FlowSnapshot:
+        payload = {"$meta.reason": reason}
+        payload.update({f"$meta.{key}": value for key, value in (metadata or {}).items()})
         return self._commit(
-            FlowEventKind.STEP_OUTCOME_UNKNOWN, self.snapshot.current_node, {"reason": reason}
+            FlowEventKind.STEP_OUTCOME_UNKNOWN, self.snapshot.current_node, payload
         )
 
     def resolve_branch(self) -> FlowSnapshot:
@@ -492,7 +510,13 @@ class PersistentFlow:
     def cancel(self, reason: str = "cancelled") -> FlowSnapshot:
         return self._commit(FlowEventKind.CANCELLED, self.snapshot.current_node, {"reason": reason})
 
-    def needs_attention(self, reason: str) -> FlowSnapshot:
+    def needs_attention(
+        self, reason: str, evidence: Mapping[str, str] | None = None,
+        metadata: Mapping[str, str] | None = None,
+    ) -> FlowSnapshot:
+        payload = dict(evidence or {})
+        payload["$meta.reason"] = reason
+        payload.update({f"$meta.{key}": value for key, value in (metadata or {}).items()})
         return self._commit(
-            FlowEventKind.NEEDS_ATTENTION, self.snapshot.current_node, {"reason": reason}
+            FlowEventKind.NEEDS_ATTENTION, self.snapshot.current_node, payload
         )
