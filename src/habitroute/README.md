@@ -4,23 +4,23 @@ Canonical code is organized around **Machine Habits**, **Execution Harnesses** a
 
 ## Machine habits
 
-`MachineHabit` represents a reusable, versioned machine-operation optimization. It is scoped to a harness/environment/context, has triggers and preconditions, contains operation steps, declares postconditions and side-effect semantics, and carries baseline/candidate performance evidence.
+`MachineHabit` is a reusable, versioned machine-operation optimization. It is scoped to a harness/environment/context, has triggers and preconditions, contains operation steps, declares postconditions and side-effect semantics, and carries baseline/candidate performance evidence.
 
-`authorize_machine_habit` fails closed unless the habit is active, its exact harness/environment scope matches, trigger and preconditions pass, the efficiency gate passes, operations are allowed, approval requirements are met and retry/compensation limits fit the harness.
+`authorize_machine_habit` fails closed unless the exact harness/environment scope matches, trigger and preconditions pass, the efficiency gate passes, operations are allowed, approvals are supplied and retry limits fit the harness.
 
-The efficiency gate requires a comparable input cohort and sample count, protects success/postcondition reliability using Wilson lower bounds, and requires an improvement in a predeclared cost metric.
+`execute_machine_habit` invokes the operation pattern using a `HarnessAdapter`. Input bindings can be literal values or `$state.key` references. The executor records operations, uses a stable idempotency key across retries of the same step, and checks postconditions before reporting success.
+
+Compensatable operations currently fail closed: a compensation adapter is not implemented. Unknown side-effect outcomes return `NEEDS_ATTENTION`.
 
 ## Harnesses
 
-`HarnessProfile` defines the policy/capability boundary. `HarnessAdapter` is the provider-neutral interface for invoking actual operations and returning typed outcomes. No production adapter is included yet.
+`HarnessProfile` defines the policy/capability boundary. `HarnessAdapter` is the provider-neutral interface for invoking actual operations and returning typed outcomes. No production provider adapter is included yet.
 
 ## Persistent flows
 
-`FlowDefinition` is immutable and versioned. `FlowRun` is separate mutable state. Habit nodes pin an exact habit version. `PersistentFlow` appends events to a `FlowJournal`; `JsonlFlowJournal` provides a local append-only implementation with fsync and single-writer-per-run semantics.
+`FlowDefinition` is immutable and versioned. A flow run is separate mutable state. Habit nodes pin an exact habit version. `PersistentFlow` appends events to a `FlowJournal`; `JsonlFlowJournal` provides a local append-only implementation with fsync and single-writer-per-run semantics.
 
 Recovery uses `PersistentFlow.restore(...)` to replay the event history. The instance method `resume()` changes a paused flow back to its saved running/waiting state.
-
-Example lifecycle:
 
 ~~~python
 from habitroute.flows import PersistentFlow, JsonlFlowJournal
@@ -28,7 +28,7 @@ from habitroute.flows import PersistentFlow, JsonlFlowJournal
 journal = JsonlFlowJournal("./flow-data")
 run = PersistentFlow.start(definition, "run-0001", journal, {"repo": "project-a"})
 
-# A worker executes the current node using run.idempotency_key.
+# A flow worker resolves and invokes the current node via a HarnessAdapter.
 # It then records the actual result:
 run.succeed_step({"checks.pass": "true"})
 
@@ -38,7 +38,7 @@ run = PersistentFlow.restore(definition, "run-0001", journal)
 
 ## Important limits
 
-The flow engine does not execute the external operation. Your worker/harness adapter does that. Persisting flow state does not make external effects exactly-once. Classify operations and supply idempotency, deduplication, compensation or manual reconciliation for uncertain outcomes.
+The flow engine does not automatically dispatch operations to the harness or commit results from `execute_machine_habit`. A worker must connect those components. Persisting flow state does not make external effects exactly-once. Classify operations and supply idempotency, deduplication, compensation or manual reconciliation for uncertain outcomes.
 
 JSONL is a local single-writer journal, not a distributed database. Use an appropriate transactional store/lease adapter before multi-worker production use.
 
