@@ -4,7 +4,7 @@
 
 HabitRoute is a research-to-engineering project for learning reusable action sequences ("habits"), verifying them against observed transitions, detecting when they become unreliable, and retaining useful routes under a bounded memory budget.
 
-> Current status: research prototype. The repository is being initialized from the tested step-savings experiment. It is not yet a stable, installable Python library.
+> Current status: research prototype. The initial simulator, retention-policy experiments, tests, and evidence reports are committed. The extracted reusable Python library is not yet implemented.
 
 ## Why it exists
 
@@ -37,7 +37,7 @@ See [the experiment report](experiments/step_savings_v1/RESULTS_REPORT.md) and [
 
 ## Repository map
 
-- `experiments/step_savings_v1/` — preserved simulator, baseline, tests, protocol, and results from the first study.
+- `experiments/step_savings_v1/` — preserved simulator, usage-utility control, step-savings policy, tests, protocol, and analysis reports.
 - `docs/ARCHITECTURE.md` — target system boundaries and invariants.
 - `docs/ROADMAP.md` — sequenced engineering work and promotion gates.
 - `docs/DECISIONS.md` — explicit decisions and unresolved assumptions.
