@@ -114,7 +114,7 @@ class FlowWorker:
         if node.target_ref not in profile.allowed_operations:
             return self._attention(flow, "operation_not_allowed")
         if node.target_ref in profile.approval_required and node.target_ref not in self.approved_operations:
-            flow.pause()
+            flow.pause("approval_required")
             return FlowDispatchResult(DispatchStatus.PAUSED, node.node_id, "approval_required")
         if node.max_attempts > profile.max_step_attempts:
             return self._attention(flow, "harness_attempt_limit_exceeded")
@@ -194,14 +194,14 @@ class FlowWorker:
                 operation.operation_ref in self.harness.profile.approval_required
                 and operation.operation_ref not in self.approved_operations
             ):
-                flow.pause()
+                flow.pause("approval_required")
                 return FlowDispatchResult(DispatchStatus.PAUSED, node.node_id, "approval_required")
         authorization = authorize_machine_habit(
             habit, self.harness.profile, flow.snapshot.context_dict(), self.approved_operations
         )
         if not authorization.eligible:
             if authorization.requires_approval:
-                flow.pause()
+                flow.pause("approval_required")
                 return FlowDispatchResult(DispatchStatus.PAUSED, node.node_id, authorization.reason)
             return self._attention(flow, authorization.reason)
 
@@ -234,7 +234,7 @@ class FlowWorker:
             return self._result_after_transition(flow, node.node_id, "habit_succeeded")
 
         if result.status is MachineExecutionStatus.HANDOFF and result.reason == "approval_required":
-            flow.pause()
+            flow.pause("approval_required")
             return FlowDispatchResult(DispatchStatus.PAUSED, node.node_id, result.reason)
 
         if result.status is MachineExecutionStatus.FAILED:
