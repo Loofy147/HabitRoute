@@ -2,92 +2,98 @@
 
 ## Scope
 
-HabitRoute turns successful action sequences into reusable route-memory records. It is not a world simulator, a general planner, or an encoder. Those are dependencies supplied through interfaces.
+HabitRoute is a machine-execution optimization system. It discovers, verifies, versions and reuses more efficient patterns for recurring machine operations. It is not a human-habit model, reinforcement-learning skill learner, general planner or environment simulator.
 
-The architecture below is the target design. The current executable implementation remains in `experiments/step_savings_v1/`.
+The canonical architecture has three primary entities:
 
-## Runtime flow
+1. **Machine Habit** — a reusable optimized operation pattern with explicit scope, pre/postconditions and matched efficiency evidence.
+2. **Execution Harness** — the replaceable environment wrapper that authorizes operations, applies controls, invokes tools/APIs/scripts, observes results and records evidence.
+3. **Persistent Flow** — a durable, versioned orchestration instance that stores progress, checkpoints, retries, waits and exact habit versions used.
 
-1. **Observe** — obtain an observation and a stable environment/context fingerprint.
-2. **Resolve state** — map the observation into the current state representation. An unresolved or ambiguous state is not silently treated as a known state.
-3. **Select route** — search the trusted library for a compatible route; compare it with the planner when audit policy requires.
-4. **Execute** — execute the next action while observing the resulting state.
-5. **Verify** — compare the observed transition with the route's predicted next state.
-6. **Update evidence** — record success, slip, contradiction, and context; preserve provenance.
-7. **Adapt** — quarantine, revoke, or revalidate affected habits when evidence indicates a change.
-8. **Retain** — prune under capacity constraints using explicit, measurable objectives.
+## Runtime topology
+
+~~~text
+Persistent Flow Run
+  -> resolves current immutable Flow Definition node
+  -> asks Habit Registry for applicable Machine Habits
+  -> applies Harness authorization and preflight
+  -> executes baseline or selected habit through Harness Adapter
+  -> verifies postconditions and captures cost/evidence
+  -> appends event and commits checkpoint
+  -> advances, branches, waits, retries, pauses or terminates
+~~~
+
+The flow owns progress. The habit owns reusable execution optimization. The harness owns execution boundaries and evidence capture.
 
 ## Components
 
-### Environment adapter
+### Machine Habit Registry
 
-Owns reset/observe/step semantics and exposes context identity. HabitRoute must not assume a discrete grid, a particular simulator, or a particular action type.
+Stores immutable habit versions, indexes by operation/trigger signature and scope, validates preconditions, and exposes active/at-risk/quarantined/revoked states. Candidate retrieval does not authorize execution.
 
-### State and representation adapter
+### Baseline and efficiency evaluator
 
-Maps observations to comparable state identities. The initial experiments use latent prototypes; the engine boundary must permit symbolic, learned, or externally supplied state keys.
+Compares baseline and candidate procedures on the same input cohort and harness policy. Checks required outputs/postconditions and reports latency, calls, compute, tokens, external charges, retries, recovery and operator intervention separately. Promotion requires correctness plus a declared efficiency improvement.
 
-### Planner adapter
+### Execution Harness
 
-Produces a candidate route and its cost. Planner output is a proposal, not proof that the route is executable in the live world.
+Defines or wraps environment capabilities, operation allowlists, approvals, credentials boundaries, resource/time limits, validation, instrumentation, retry/idempotency semantics, interruption and fallback. Test and production harnesses share interfaces but need not share policies.
 
-### Habit library
+### Harness Adapter
 
-Stores route records and indexes them for lookup. The initial experiment stores contiguous subsequences. A future implementation must define route identity, deduplication, indexing, persistence, and migration behavior.
+Performs the actual operation through an API, CLI, script, repository service, agent runtime or another machine interface. It accepts an explicit operation identity and idempotency key where supported. HabitRoute must not bind itself to a particular provider.
 
-### Certificate and evidence layer
+### Persistent Flow Definition
 
-Associates each route with scoped evidence: context fingerprint/revision, representation version, tested preconditions, execution counts, observed outcomes, and provenance. A certificate is a revocable claim with an applicability boundary—not a permanent guarantee.
+Immutable, versioned state-machine/DAG definition containing operations, habit invocations, branches, waits, approvals, retries, subflows and terminal nodes.
 
-### Adaptive audit
+### Persistent Flow Run
 
-Chooses when to compare a stored route with a fresh planner proposal or perform a verification execution. Audit decisions must account for expected risk and the cost of lookups/planner calls.
+Mutable run instance pinned to one flow-definition version. Stores its run ID, current node, inputs/context, attempt state, committed outputs, waiting state and exact habit versions used.
 
-### Change and slip monitor
+### Flow Journal and Checkpoint Store
 
-Distinguishes isolated execution slips from persistent transition contradictions. It must avoid automatic permanent demotion from one noisy observation.
+Append-only events plus snapshots/checkpoints. Replay reconstructs control state; it must not repeat external operations already recorded as committed. The store abstraction must support transactional sequence checks or equivalent single-writer guarantees.
 
-### Retention and pruning
+### Evidence and provenance
 
-Treats coverage, reliability, action steps saved, freshness, and computational cost as distinct dimensions. Keep the utility baseline and candidate policies independently selectable until comparative evidence supports promotion.
+Every run/event records flow/definition version, node, habit version, harness/environment version, operation identity, idempotency key, timestamps, outputs, postcondition results, status and cost measurements. Historical evidence is immutable; lifecycle changes append new events.
 
-### Executor and recovery
+## Machine habit lifecycle
 
-Executes only routes that pass applicability and trust gates. On mismatch, stops the route, records evidence, and falls back to a planner/recovery path.
+`CANDIDATE -> EVALUATED -> VERIFIED -> ACTIVE -> AT_RISK -> QUARANTINED -> REVALIDATED`
+
+`REVOKED` and `SUPERSEDED` are terminal lifecycle outcomes for that version.
+
+Candidate generation is not activation. An active habit must satisfy its context/input/harness contract and have evidence that the optimization preserves required behavior while improving the declared cost objective.
+
+## Persistent execution semantics
+
+- Definitions are immutable/versioned; active runs pin their definition version.
+- Checkpoint a side-effecting operation before advancing the cursor.
+- An in-flight external operation may have completed even if the worker lost its response.
+- Retries use operation-specific idempotency, deduplication or compensation rules.
+- Never promise exactly-once effects from a durable journal alone.
+- Store external observations, time, random outcomes and model/tool responses needed for deterministic replay.
+- If safe continuation cannot be established, move the run to `NEEDS_ATTENTION` rather than guessing or retrying indefinitely.
 
 ## Core invariants
 
-- Unverified planner predictions never enter the trusted library as verified habits.
-- Every trusted habit is scoped to an environment/context fingerprint and representation version.
-- Contradicted transitions invalidate or quarantine all dependent habits before reuse.
-- A single slip is not equivalent to a confirmed regime change.
-- A certificate can expire, be suspended, be revoked, and be renewed.
-- A route lookup must not return a habit whose applicability gate fails.
-- Capacity pruning must respect configured structural invariants and report any coverage loss.
-- Deterministic test runs record seed, configuration, code revision, and data revision.
-- Unknown state mappings remain unknown; they are not coerced into false certainty.
+1. Machine habits are operation optimizations, not general skills.
+2. Harness policy is authoritative; a habit cannot widen its capabilities or bypass approvals.
+3. A candidate runs only within its declared environment, harness, trigger, input and precondition scope.
+4. A habit is promoted only after behavior/postconditions pass and declared efficiency improves.
+5. Baseline execution remains available for fallback and matched comparison.
+6. A persistent flow owns run progress; a habit does not own durable workflow state.
+7. A flow run pins the exact definition and habit versions it used.
+8. Checkpoints and event sequence are committed before a flow advances.
+9. Replays do not repeat committed side effects.
+10. Non-idempotent actions are not automatically retried without verified deduplication or compensation.
+11. Cost dimensions and correctness measures remain separately inspectable.
+12. All evidence is reproducible from run, code, harness, input cohort and dependency provenance.
 
-## Certificate lifecycle
+## Relationship to the earlier experiment
 
-Proposed states:
+`experiments/step_savings_v1/` remains a useful synthetic experiment on transition-route reuse, adaptive audit and capacity-limited retention. It is a narrow baseline for one form of machine execution memory, not a proof of durable machine habits or general tool-workflow efficiency.
 
-`PROPOSED → VERIFIED → ACTIVE → AT_RISK → QUARANTINED → REVOKED`
-
-A quarantined route may return to `ACTIVE` only after revalidation against the current context. Expiry and explicit invalidation are separate events and must be recorded.
-
-## Policy objective
-
-Do not collapse all value into one opaque score. Retention should expose interpretable terms and diagnostics:
-
-- expected action steps saved;
-- reliability estimate and evidence volume;
-- marginal coverage contribution;
-- freshness / change risk;
-- lookup and verification cost;
-- memory cost.
-
-The first optimization study showed that usage-frequency utility can preserve detours under tight capacity, while step-savings can improve route quality. It also showed that the latter does not consistently solve repeated regime changes. Any combined score must preserve this distinction in its evaluation.
-
-## Current implementation boundary
-
-The experiment code currently couples simulation, model setup, route storage, audit logic, and benchmark execution. It is retained unchanged as a research baseline. Extraction into `src/habitroute/` is a separate milestone with behavior-parity tests.
+The option-oriented `src/habitroute/contracts.py` and `execution.py` are retained as prototype/compatibility code. The canonical product model is in `docs/MACHINE_HABITS_AND_FLOWS.md` and `docs/HABIT_SPEC_v0.1.md` (machine-habit spec v0.2). New core work should be added in machine-operation and persistent-flow modules.
