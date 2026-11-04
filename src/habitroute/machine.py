@@ -343,3 +343,128 @@ def authorize_machine_habit(
         if operation.operation_ref in harness.approval_required and operation.operation_ref not in approved_operations:
             return HabitUseDecision(False, "approval_required", True, habit.efficiency.relative_gain)
     return HabitUseDecision(True, "authorized", False, habit.efficiency.relative_gain)
+
+class MachineExecutionStatus(str, Enum):
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    NEEDS_ATTENTION = "needs_attention"
+    HANDOFF = "handoff"
+
+
+@dataclass(frozen=True, slots=True)
+class OperationExecutionRecord:
+    operation_ref: str
+    attempts: int
+    idempotency_key: str
+    outcome: OperationOutcome
+    duration_ms: float
+    resource_units: float
+    error_code: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MachineHabitExecutionResult:
+    status: MachineExecutionStatus
+    reason: str
+    final_state: tuple[tuple[str, str], ...]
+    records: tuple[OperationExecutionRecord, ...]
+    total_duration_ms: float
+    total_resource_units: float
+
+
+def execute_machine_habit(
+    habit: MachineHabit,
+    harness: HarnessAdapter,
+    initial_state: Mapping[str, str],
+    *,
+    run_id: str,
+    approved_operations: frozenset[str] = frozenset(),
+) -> MachineHabitExecutionResult:
+    """Execute one authorized machine habit through a provider-neutral harness.
+
+    Retries reuse the same idempotency key for one logical operation step. Unknown
+    outcomes and incomplete postconditions stop the habit for reconciliation.
+    """
+    state = dict(initial_state)
+    records: list[OperationExecutionRecord] = []
+    total_duration = 0.0
+    total_resources = 0.0
+
+    def result(status: MachineExecutionStatus, reason: str) -> MachineHabitExecutionResult:
+        return MachineHabitExecutionResult(
+            status, reason, tuple(sorted(state.items())), tuple(records),
+            total_duration, total_resources,
+        )
+
+    if not run_id.strip():
+        return result(MachineExecutionStatus.HANDOFF, "run_id_required")
+
+    authorization = authorize_machine_habit(
+        habit, harness.profile, state, approved_operations
+    )
+    if not authorization.eligible:
+        return result(MachineExecutionStatus.HANDOFF, authorization.reason)
+
+    for index, operation in enumerate(habit.operations):
+        inputs: dict[str, str] = {}
+        for name, source in operation.input_bindings:
+            if source.startswith("$state."):
+                state_key = source[len("$state."):]
+                if state_key not in state:
+                    return result(MachineExecutionStatus.HANDOFF, "input_binding_missing")
+                inputs[name] = state[state_key]
+            else:
+                inputs[name] = source
+
+        idempotency_key = f"{run_id}:{habit.habit_id}:{habit.version}:{index}"
+        attempts_limit = min(operation.max_attempts, harness.profile.max_step_attempts)
+        operation_succeeded = False
+
+        for attempt in range(1, attempts_limit + 1):
+            try:
+                observed = harness.invoke(
+                    operation, inputs, idempotency_key=idempotency_key
+                )
+            except Exception as exc:
+                return result(
+                    MachineExecutionStatus.NEEDS_ATTENTION,
+                    f"harness_adapter_exception:{type(exc).__name__}",
+                )
+            total_duration += observed.duration_ms
+            total_resources += observed.resource_units
+            records.append(OperationExecutionRecord(
+                operation.operation_ref, attempt, idempotency_key, observed.outcome,
+                observed.duration_ms, observed.resource_units, observed.error_code,
+            ))
+
+            if observed.outcome is OperationOutcome.SUCCEEDED:
+                state.update(dict(observed.outputs))
+                operation_succeeded = True
+                break
+            if observed.outcome is OperationOutcome.UNKNOWN:
+                return result(MachineExecutionStatus.NEEDS_ATTENTION, "operation_outcome_unknown")
+            if operation.effect in (
+                OperationEffect.NON_REPEATABLE, OperationEffect.COMPENSATABLE
+            ):
+                terminal = (
+                    MachineExecutionStatus.NEEDS_ATTENTION
+                    if operation.effect is OperationEffect.COMPENSATABLE
+                    else MachineExecutionStatus.FAILED
+                )
+                return result(terminal, "operation_not_safely_retryable")
+            if attempt == attempts_limit:
+                return result(MachineExecutionStatus.FAILED, "operation_attempts_exhausted")
+
+        if not operation_succeeded:
+            return result(MachineExecutionStatus.FAILED, "operation_failed")
+
+    failed_postconditions = [
+        condition.key for condition in habit.postconditions if not condition.matches(state)
+    ]
+    if failed_postconditions:
+        return result(
+            MachineExecutionStatus.NEEDS_ATTENTION,
+            "postconditions_not_satisfied:" + ",".join(failed_postconditions),
+        )
+    return result(MachineExecutionStatus.SUCCEEDED, "habit_completed_and_verified")
+
