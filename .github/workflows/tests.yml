@@ -11,19 +11,25 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
-    defaults:
-      run:
-        working-directory: experiments/step_savings_v1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install experiment dependencies
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r experiments/step_savings_v1/requirements.txt
       - name: Compile experiment modules
+        working-directory: experiments/step_savings_v1
         run: python -m py_compile habit_system.py habit_library.py habit_refine.py test_habit_utility.py
-      - name: Run focused tests
+      - name: Run legacy focused tests
+        working-directory: experiments/step_savings_v1
         run: python -m unittest -v test_habit_utility.py
-      - name: Run built-in invariant self-test
+      - name: Run legacy invariant self-test
+        working-directory: experiments/step_savings_v1
         run: python -c "import habit_system; passed, total = habit_system.selftest(); assert passed == total, f'{passed}/{total}'; print(f'{passed}/{total} assertions passed')"
+      - name: Compile new core and tests
+        run: python -m compileall -q src tests
+      - name: Run new core contract tests
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
