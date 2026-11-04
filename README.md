@@ -22,7 +22,7 @@ A flow owns progress. A habit owns reuse/optimization. A harness owns the execut
 ## Research and design
 
 - [Machine habits, harnesses and persistent flows](docs/MACHINE_HABITS_AND_FLOWS.md)
-- [Machine Habit Specification v0.2](docs/HABIT_SPEC_v0.1.md)
+- [Machine Habit Specification v0.2](docs/HABIT_SPEC_v0.1.md) — canonical content; filename retained from the initial research branch.
 - [Research review](docs/HABIT_MODEL_RESEARCH.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Contradictions in the legacy route experiment](docs/CONTRADICTIONS_AND_GAPS.md)
@@ -41,6 +41,12 @@ The local flow journal is append-only and fsyncs events before the in-memory flo
 ## Legacy experiment evidence
 
 The original simulator studies 12-state and 24-state worlds, capacity-limited memory, audit, pruning, slips and rewiring. Its results remain experiment-specific; they do not yet demonstrate real API/tool workflow savings or crash-safe orchestration.
+
+## Verification status
+
+The current GitHub Actions matrix passed **77/77 core tests** plus the unchanged legacy experiment tests on Python 3.11, 3.12 and 3.13. The machine-habit suite includes the harness-driven executor; the flow suite includes journal restart/replay.
+
+See [the successful test run](https://github.com/Loofy147/HabitRoute/actions/runs/41839828215). Subsequent documentation/API export commits are being rechecked by CI.
 
 ## Install and test
 
