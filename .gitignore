@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+.Python
+.venv/
+venv/
+.env
+.env.*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.DS_Store
+results-*.json
+*.tmp
