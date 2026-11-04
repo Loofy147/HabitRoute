@@ -10,7 +10,7 @@ Location: src/habitroute/
 - Immutable, typed records for context scope and representation version.
 - State belief with explicit unknown mass and normalized probability validation.
 - Initiation region gate with minimum in-region mass and maximum unknown mass.
-- Fixed macro schema with action sequence and expected state checkpoints.
+- Fixed macro schema with action sequence, expected state checkpoints and an independent checkpoint-confidence threshold.
 - Finite state-conditioned reactive policy that chooses an action only when one action covers enough current belief mass; refuses ambiguous, unsupported or representation-mismatched beliefs.
 - Typed artifact references for guarded-sequence and goal-conditioned controller kinds (not yet executable).
 - Goal/termination metadata with success states and maximum step budget.
@@ -29,7 +29,7 @@ The Wilson lower bound is an empirical statistical gate over a caller-supplied s
 
 ## Not implemented yet
 
-- No executor or runtime step loop.
+- No environment-owning executor: `ExecutionSession` is only an adapter-facing controller state machine and does not call `step()` on an environment.
 - No learned reactive policy discovery/update; the current reactive controller is a finite state/action table. Guarded-sequence and goal-conditioned controllers are references only.
 - No independent evidence ledger, signed evidence refs, or verification that caller-supplied trial counts came from genuine runs.
 - No automatic candidate/probation/active promotion workflow.
@@ -37,16 +37,17 @@ The Wilson lower bound is an empirical statistical gate over a caller-supplied s
 - No online belief estimator; adapters must supply a valid normalized belief.
 - No probabilistic transition model or Markov-abstraction test.
 - No terminal-outcome to successor-initiation composition calculation.
-- No runtime safety monitor, interrupt handler or tested fallback controller. Static macro/action checks do not make execution safe.
+- No independent safety monitor or tested fallback controller. `ExecutionSession` checks declared forbidden states and action allowlists, but does not establish formal safety, evaluate the optional numeric risk budget, or enforce every custom failure/interruption condition.
 - No adapter to the old simulator yet.
+- The caller must interrupt the session when a live certificate is revoked or a non-step resource budget is exhausted; the session does not poll a certificate registry.
 
 ## Verification
 
-- Local focused core tests: 27/27 passing.
+- Local focused core tests: 39/39 passing.
 - Local compileall: passing.
 - Local editable install using the pyproject metadata: passing.
 - GitHub Actions: tests run on Python 3.11, 3.12 and 3.13; the latest run is linked from the repository Actions tab. This status record must be updated if the newest commit changes the test result.
 
 ## Immediate next build
 
-Implement the execution result types, a guarded fixed-macro executor, step-by-step observation validation, interruption/timeout handling and an append-only evidence event interface. Wire the executor to authorize_habit without allowing the legacy nearest-prototype lookup to bypass the initiation gate.
+Add an append-only execution evidence event interface, then compose terminal-outcome distributions with successor initiation regions. After that, build a simulator adapter and test it against the legacy harness while ensuring nearest-prototype lookup cannot bypass the initiation gate.
