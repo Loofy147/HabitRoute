@@ -406,6 +406,11 @@ def execute_machine_habit(
         return result(MachineExecutionStatus.HANDOFF, authorization.reason)
 
     for index, operation in enumerate(habit.operations):
+        if operation.effect is OperationEffect.COMPENSATABLE:
+            return result(
+                MachineExecutionStatus.HANDOFF,
+                "compensation_adapter_not_implemented",
+            )
         inputs: dict[str, str] = {}
         for name, source in operation.input_bindings:
             if source.startswith("$state."):
