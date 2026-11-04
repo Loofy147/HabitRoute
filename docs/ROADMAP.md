@@ -1,68 +1,79 @@
 # Roadmap
 
-## P0 — Preserve the evidence baseline
+## P0 — Preserve and verify the experimental baseline
 
-**Status: initializing**
+**Status: preserved; clean-clone artifact completeness still needs final verification.**
 
 - [x] Create the public repository.
-- [x] Preserve the current simulator and step-savings implementation.
-- [x] Preserve the baseline implementation and focused tests.
-- [x] Record the capacity, sensitivity, and repeated-change results.
-- [ ] Verify every committed artifact from a clean clone.
-- [ ] Pin the experiment environment and record the Python/NumPy versions used.
+- [x] Preserve the simulator and step-savings experiment.
+- [x] Preserve the planner/world dependency and focused tests.
+- [x] Record capacity, sensitivity and repeated-change findings.
+- [ ] Add all raw per-seed artifacts and a reproducibility manifest.
+- [ ] Verify experiment reproduction from a clean clone and pin dependency versions.
 
-**Gate:** a clean checkout reproduces the focused test suite and the published deterministic result files.
+**Gate:** the legacy experiment is independently reproducible and remains unchanged by core extraction.
 
-## P1 — Extract a behavior-preserving engine
+## P1 — Define and enforce the habit contract
 
-- [ ] Define typed interfaces for environment, state representation, planner, route store, and executor.
-- [ ] Extract pure route/library logic from the simulation harness.
-- [ ] Preserve the existing usage-utility and step-savings policies as named baselines.
-- [ ] Add parity tests that run identical fixtures through old and extracted code.
-- [ ] Keep the experiment harness in place until parity is demonstrated.
+**Current priority.** See HABIT_SPEC_v0.1.md and CONTRADICTIONS_AND_GAPS.md.
 
-**Gate:** no unexplained metric or behavior drift on the fixed fixtures and selected seeds.
+- [ ] Add dependency-free typed records for immutable habit versions, scopes, initiation, controllers, goals and termination.
+- [ ] Add fail-closed initiation evaluation: candidate retrieval cannot authorize execution.
+- [ ] Add version/scope-bound empirical certificate validation with uncertainty.
+- [ ] Add typed termination outcomes: success, failure, interrupted, timeout, resource limit and unknown.
+- [ ] Add invariant tests for version mismatch, context mismatch, OOD belief and low evidence.
+- [ ] Keep fixed macros as the first supported controller without limiting the schema to fixed macros.
 
-## P2 — Make trust explicit
+**Gate:** unknown/OOD state, mismatched context, mismatched representation, or invalid certificate cannot authorize a habit. All decisions have explicit reasons.
 
-- [ ] Define a habit identity and immutable evidence record.
-- [ ] Define certificate scope: environment fingerprint/revision, representation version, preconditions, and validity window.
-- [ ] Implement certificate states, expiry, quarantine, revocation, and renewal.
-- [ ] Prevent lookup/execution when applicability checks fail.
-- [ ] Test contradictory transitions and invalidation propagation.
+## P2 — Repair representation and composition assumptions
 
-**Gate:** no stale or out-of-scope certificate is accepted by the route selector.
+- [ ] Measure Markov/predictive sufficiency of the abstract representation.
+- [ ] Add belief/context-aware states or probabilistic transitions for aliasing and stochastic outcomes.
+- [ ] Fix staleness metrics for many-to-one prototype mappings.
+- [ ] Add terminal-outcome to next-initiation compatibility with uncertainty bounds.
+- [ ] Version encoders/prototypes and suspend unaligned habits.
 
-## P3 — Improve adaptation and audit economics
+**Gate:** aliasing and stochastic-transition tests do not trigger false edge contradictions or false certificates.
 
-- [ ] Separate slip detection from persistent change detection.
-- [ ] Compare adaptive audit with fixed audit at matched quality and compute paired uncertainty.
-- [ ] Add freshness/change-risk to retention as a separate experimental term.
-- [ ] Measure lookup count, lookup latency, planner calls, audit calls, execution steps, aborts, and recovery cost.
-- [ ] Test single changes, repeated changes, change-plus-slip, and noisy representations.
+## P3 — Discover better habits, not more chunks
 
-**Gate:** no false permanent demotion in unchanged-world slip tests; repeated-change regressions are quantified and compared with the planner ceiling.
+- [ ] Separate episode memory, primitive transition evidence and option definitions.
+- [ ] Compare all-contiguous-subsequence enumeration with segmentation at stable subgoals and decision points.
+- [ ] Build a guarded finite-state controller for branching continuations.
+- [ ] Compare fixed macro and reactive option on the same branching/non-branching tasks.
+- [ ] Measure independent coverage, lookup load, memory, duration and execution quality.
 
-## P4 — Validate retention and scalability
+**Gate:** segmentation reduces redundant records/lookup work without unacceptable loss of coverage or route quality.
 
-- [ ] Retain coverage and action-step quality as separate outcomes.
-- [ ] Compare utility, step-savings, random, FIFO, and any new policy on paired seeds.
-- [ ] Add capacities across a wider range, not only 12/20/28.
-- [ ] Profile library lookup and pruning in larger worlds.
-- [ ] Test alternate change mechanisms and encoder drift.
-- [ ] Add formal paired statistical analysis with effect sizes and confidence intervals.
+## P4 — Correct adaptation and trust economics
 
-**Gate:** a policy is promoted only for the region where it beats the control without violating safety/coverage constraints.
+- [ ] Make certificates per habit version and context, not a start/goal cache.
+- [ ] Ensure every behavior-affecting mutation invalidates dependent lookup/audit caches.
+- [ ] Separate transient slips, burst noise, observation/representation failures and persistent regime changes.
+- [ ] Compare sequential change-detection approaches on false alarms, delay and misses.
+- [ ] Make adaptive audit risk/value-of-information based and include audit cost.
+- [ ] Ensure dominated pruning proves replacement using only currently admissible habits and that replacement survives.
 
-## P5 — Release a reusable Python library
+**Gate:** no invalid route can dominate/delete a valid route; false-demotion and detection-delay trade-offs are quantified.
 
-- [ ] Create the `src/habitroute/` package and public API.
-- [ ] Add type checking, linting, docs, and CI.
-- [ ] Add at least one simulator-independent example adapter.
-- [ ] Define persistence and schema versioning only after core interfaces stabilize.
-- [ ] Select a license explicitly before inviting reuse.
-- [ ] Publish a versioned release only after clean-install verification.
+## P5 — Optimize selection and retention
+
+- [ ] Keep the current action-step cost as a baseline.
+- [ ] Add task-dependent duration, resource, failure, safety, recovery, lookup and planning cost components.
+- [ ] Evaluate goal/reward revaluation when transitions remain unchanged.
+- [ ] Compare retention policies with paired uncertainty and multi-objective results.
+
+**Gate:** no new scalar policy is promoted without showing each component and its trade-offs.
+
+## P6 — Release a reusable Python library
+
+- [ ] Extract the validated core behind simulator-independent adapters.
+- [ ] Add type checking, linting, CI, documentation and an example adapter.
+- [ ] Define persistence and schema migration after the contract stabilizes.
+- [ ] Select a license before encouraging reuse.
+- [ ] Publish a versioned release only after clean-install and integration tests.
 
 ## Immediate next task
 
-Start P1 with a characterization suite around the current library's externally observable behavior. Extract the library behind interfaces without changing scoring, pruning, or audit decisions. Do not add freshness/change-risk to the production path yet; first make it a separately switchable experimental policy.
+Implement P1 as a pure-Python, dependency-free domain contract and test it before connecting it to the old simulator. Do not replace the current experiment implementation yet.
