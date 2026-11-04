@@ -71,6 +71,7 @@ class FlowNode:
     branch_equals: str | None = None
     next_on_true: str | None = None
     next_on_false: str | None = None
+    target_version: int | None = None
     end_status: FlowStatus = FlowStatus.SUCCEEDED
 
     def __post_init__(self) -> None:
@@ -79,6 +80,12 @@ class FlowNode:
         if self.kind in (FlowNodeKind.OPERATION, FlowNodeKind.HABIT):
             if not self.target_ref or not self.target_ref.strip():
                 raise ValueError("operation/habit nodes require target_ref")
+            if self.kind is FlowNodeKind.HABIT and (
+                self.target_version is None or self.target_version < 1
+            ):
+                raise ValueError("habit nodes must pin a positive machine-habit version")
+            if self.kind is FlowNodeKind.OPERATION and self.target_version is not None:
+                raise ValueError("operation nodes cannot carry a habit version")
             if not self.next_on_success:
                 raise ValueError("operation/habit nodes require next_on_success")
             if self.max_attempts < 1:
@@ -92,7 +99,7 @@ class FlowNode:
             ):
                 raise ValueError("compensatable flow steps require compensation_ref")
         elif self.kind is FlowNodeKind.BRANCH:
-            if not self.branch_key or self.branch_equals is None:
+            if not self.branch_key or not self.branch_key.strip() or self.branch_equals is None:
                 raise ValueError("branch nodes require branch_key and branch_equals")
             if not self.next_on_true or not self.next_on_false:
                 raise ValueError("branch nodes require true and false destinations")
