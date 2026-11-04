@@ -100,8 +100,10 @@ class FlowNode:
             if not self.next_on_success:
                 raise ValueError("wait nodes require next_on_success")
         elif self.kind is FlowNodeKind.END:
-            if self.end_status not in (FlowStatus.SUCCEEDED, FlowStatus.FAILED):
-                raise ValueError("end_status must be succeeded or failed")
+            if self.end_status not in (
+                FlowStatus.SUCCEEDED, FlowStatus.FAILED, FlowStatus.NEEDS_ATTENTION
+            ):
+                raise ValueError("end_status must be succeeded, failed or needs_attention")
             if any((self.next_on_success, self.next_on_failure, self.next_on_true, self.next_on_false)):
                 raise ValueError("terminal nodes cannot have outgoing edges")
 
