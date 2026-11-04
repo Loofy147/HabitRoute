@@ -268,6 +268,8 @@ class FlowWorker:
         flow: PersistentFlow, node_id: str, reason: str,
     ) -> FlowDispatchResult:
         status = flow.snapshot.status
+        if status is FlowStatus.NEEDS_ATTENTION:
+            return FlowDispatchResult(DispatchStatus.NEEDS_ATTENTION, node_id, reason)
         if status in FlowWorker._TERMINAL:
             return FlowDispatchResult(DispatchStatus.TERMINAL, node_id, reason)
         if status is FlowStatus.WAITING:
