@@ -11,13 +11,15 @@ Location: src/habitroute/
 - State belief with explicit unknown mass and normalized probability validation.
 - Initiation region gate with minimum in-region mass and maximum unknown mass.
 - Fixed macro schema with action sequence and expected state checkpoints.
-- Typed artifact references for guarded sequence, reactive policy and goal-conditioned policy kinds (these controllers are not yet executable).
+- Finite state-conditioned reactive policy that chooses an action only when one action covers enough current belief mass; refuses ambiguous, unsupported or representation-mismatched beliefs.
+- Typed artifact references for guarded-sequence and goal-conditioned controller kinds (not yet executable).
 - Goal/termination metadata with success states and maximum step budget.
 - Safety metadata with forbidden states and optional allowed-action set.
 - Per-habit-version, per-scope empirical certificate record.
 - Authorization policy with minimum evidence count and Wilson lower confidence bound.
 - Fail-closed authorization reasons for lifecycle, environment/context, representation, habit identity/version, certificate scope/status, insufficient evidence, reliability and initiation failures.
 - Structural checks that a fixed macro starts inside its initiation region, ends in a declared success state, fits its step budget, uses allowed actions and avoids declared forbidden states.
+- Structural checks that a reactive policy's representation matches the habit scope, avoids forbidden states and uses only allowed actions.
 
 ## What authorization means
 
@@ -28,7 +30,7 @@ The Wilson lower bound is an empirical statistical gate over a caller-supplied s
 ## Not implemented yet
 
 - No executor or runtime step loop.
-- No actual guarded or reactive policy implementation; non-macro controller kinds are references only.
+- No learned reactive policy discovery/update; the current reactive controller is a finite state/action table. Guarded-sequence and goal-conditioned controllers are references only.
 - No independent evidence ledger, signed evidence refs, or verification that caller-supplied trial counts came from genuine runs.
 - No automatic candidate/probation/active promotion workflow.
 - No certificate expiry scheduler, change detector, revalidation engine or revocation propagation.
@@ -40,7 +42,7 @@ The Wilson lower bound is an empirical statistical gate over a caller-supplied s
 
 ## Verification
 
-- Local focused core tests: 21/21 passing.
+- Local focused core tests: 27/27 passing.
 - Local compileall: passing.
 - Local editable install using the pyproject metadata: passing.
 - GitHub Actions: tests run on Python 3.11, 3.12 and 3.13; the latest run is linked from the repository Actions tab. This status record must be updated if the newest commit changes the test result.
