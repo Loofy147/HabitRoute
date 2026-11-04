@@ -127,7 +127,7 @@ class FlowWorkerTests(unittest.TestCase):
             flow = PersistentFlow.start(simple_flow(node, "unused"), "worker-004",
                                         JsonlFlowJournal(tmp))
             result = FlowWorker(harness).dispatch(flow)
-            self.assertEqual(result.status, DispatchStatus.TERMINAL)
+            self.assertEqual(result.status, DispatchStatus.NEEDS_ATTENTION)
             self.assertEqual(flow.snapshot.status, FlowStatus.NEEDS_ATTENTION)
             self.assertEqual(len(harness.calls), 1)
 
@@ -143,6 +143,8 @@ class FlowWorkerTests(unittest.TestCase):
             paused = FlowWorker(harness).dispatch(flow)
             self.assertEqual(paused.status, DispatchStatus.PAUSED)
             self.assertEqual(harness.calls, [])
+            pause_meta = dict(flow.journal.load("worker-005")[-1].payload)
+            self.assertEqual(pause_meta["$meta.reason"], "approval_required")
             flow.resume()
             completed = FlowWorker(harness, approved_operations=frozenset({"deploy.preview"})).dispatch(flow)
             self.assertEqual(completed.status, DispatchStatus.TERMINAL)
@@ -161,7 +163,8 @@ class FlowWorkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             flow = PersistentFlow.start(simple_flow(node, "unused"), "worker-006",
                                         JsonlFlowJournal(tmp))
-            FlowWorker(harness).dispatch(flow)
+            result = FlowWorker(harness).dispatch(flow)
+            self.assertEqual(result.status, DispatchStatus.NEEDS_ATTENTION)
             self.assertEqual(flow.snapshot.status, FlowStatus.NEEDS_ATTENTION)
             self.assertEqual(dict(flow.snapshot.context)["scan.done"], "no")
             metadata = dict(flow.journal.load("worker-006")[-1].payload)
