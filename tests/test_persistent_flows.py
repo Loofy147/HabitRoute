@@ -19,7 +19,8 @@ def definition():
                      branch_equals="clean", next_on_true="wait", next_on_false="manual"),
             FlowNode("wait", FlowNodeKind.WAIT, next_on_success="refresh"),
             FlowNode("refresh", FlowNodeKind.HABIT, "refresh-index", "done",
-                     max_attempts=1, effect=OperationEffect.IDEMPOTENT),
+                     max_attempts=1, effect=OperationEffect.IDEMPOTENT,
+                     target_version=2),
             FlowNode("manual", FlowNodeKind.END, end_status=FlowStatus.NEEDS_ATTENTION),
             FlowNode("done", FlowNodeKind.END, end_status=FlowStatus.SUCCEEDED),
         ),
@@ -116,6 +117,12 @@ class PersistentFlowTests(unittest.TestCase):
         once = apply_flow_event(flow_def, initial, event)
         twice = apply_flow_event(flow_def, once, event)
         self.assertEqual(once, twice)
+
+
+    def test_habit_flow_node_must_pin_exact_habit_version(self):
+        with self.assertRaises(ValueError):
+            FlowNode("refresh", FlowNodeKind.HABIT, "refresh-index", "done")
+
 
     def test_definition_rejects_unknown_edges(self):
         with self.assertRaises(ValueError):
