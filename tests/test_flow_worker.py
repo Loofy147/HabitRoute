@@ -115,7 +115,7 @@ class FlowWorkerTests(unittest.TestCase):
             flow = PersistentFlow.start(simple_flow(node, "unused"), "worker-003",
                                         JsonlFlowJournal(tmp))
             result = FlowWorker(harness).dispatch(flow)
-            self.assertEqual(result.status, DispatchStatus.TERMINAL)
+            self.assertEqual(result.status, DispatchStatus.NEEDS_ATTENTION)
             self.assertEqual(flow.snapshot.status, FlowStatus.NEEDS_ATTENTION)
             self.assertEqual(len(harness.calls), 1)
 
