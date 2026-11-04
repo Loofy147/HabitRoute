@@ -91,6 +91,7 @@ class InitiationContract:
     max_unknown_mass: float = 0.01
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "accepted_states", frozenset(self.accepted_states))
         if not self.accepted_states:
             raise ValueError("initiation region cannot be empty")
         if not 0.0 <= self.min_region_mass <= 1.0:
@@ -117,6 +118,8 @@ class FixedMacro:
         return ControllerKind.FIXED_MACRO
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "actions", tuple(self.actions))
+        object.__setattr__(self, "expected_states", tuple(self.expected_states))
         if not self.actions or any(not action.strip() for action in self.actions):
             raise ValueError("fixed macro must contain non-empty actions")
         if len(self.expected_states) != len(self.actions) + 1:
@@ -149,6 +152,9 @@ class TerminationContract:
     interrupt_conditions: tuple[str, ...] = ("context_change", "safety_guard")
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "success_states", frozenset(self.success_states))
+        object.__setattr__(self, "failure_conditions", tuple(self.failure_conditions))
+        object.__setattr__(self, "interrupt_conditions", tuple(self.interrupt_conditions))
         if not self.success_states:
             raise ValueError("termination contract requires at least one success state")
         if self.max_steps <= 0:
@@ -159,11 +165,14 @@ class TerminationContract:
 class SafetyContract:
     forbidden_states: frozenset[str] = frozenset()
     allowed_actions: frozenset[str] | None = None
-    max_risk: float = 0.0
+    max_risk: float | None = None
 
     def __post_init__(self) -> None:
-        if not math.isfinite(self.max_risk) or not 0.0 <= self.max_risk <= 1.0:
-            raise ValueError("max_risk must be finite and in [0, 1]")
+        object.__setattr__(self, "forbidden_states", frozenset(self.forbidden_states))
+        if self.allowed_actions is not None:
+            object.__setattr__(self, "allowed_actions", frozenset(self.allowed_actions))
+        if self.max_risk is not None and (not math.isfinite(self.max_risk) or not 0.0 <= self.max_risk <= 1.0):
+            raise ValueError("max_risk must be None or finite and in [0, 1]")
         if self.allowed_actions is not None and not self.allowed_actions:
             raise ValueError("allowed_actions must be None or non-empty")
 
@@ -185,6 +194,12 @@ class HabitSpec:
         if self.safety.forbidden_states.intersection(self.termination.success_states):
             raise ValueError("a success state cannot also be forbidden")
         if isinstance(self.controller, FixedMacro):
+            if self.controller.expected_states[0] not in self.initiation.accepted_states:
+                raise ValueError("macro start state must belong to the initiation region")
+            if self.controller.expected_states[-1] not in self.termination.success_states:
+                raise ValueError("macro terminal state must satisfy the success contract")
+            if len(self.controller.actions) > self.termination.max_steps:
+                raise ValueError("macro length exceeds the termination step budget")
             if self.safety.allowed_actions is not None:
                 disallowed = set(self.controller.actions) - self.safety.allowed_actions
                 if disallowed:
@@ -211,6 +226,7 @@ class Certificate:
     evidence_refs: tuple[str, ...]
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "evidence_refs", tuple(self.evidence_refs))
         if not self.habit_id.strip() or self.habit_version <= 0:
             raise ValueError("certificate must identify a habit and positive version")
         if self.trials < 0 or self.successes < 0 or self.successes > self.trials:
@@ -248,7 +264,7 @@ def wilson_lower_bound(successes: int, trials: int, z_value: float = 1.96) -> fl
     """Two-sided Wilson lower confidence bound for a Bernoulli success rate."""
     if trials <= 0:
         return 0.0
-    if successes < 0 or successes > trials or z_value <= 0.0:
+    if successes < 0 or successes > trials or not math.isfinite(z_value) or z_value <= 0.0:
         raise ValueError("invalid Wilson interval inputs")
     n = float(trials)
     p = successes / n
