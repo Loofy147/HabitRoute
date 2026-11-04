@@ -1,38 +1,54 @@
 # HabitRoute Core (experimental)
 
-Dependency-free domain contracts for versioned reusable habits.
+Canonical code is organized around **Machine Habits**, **Execution Harnesses** and **Persistent Flows**.
 
-## Current scope
+## Machine habits
 
-This core slice defines immutable habit versions, context and representation scope, a belief-aware initiation gate, fixed macros, a finite state-conditioned reactive policy, a closed-loop execution session, termination and safety metadata, and version-scoped empirical certificates.
+`MachineHabit` represents a reusable, versioned machine-operation optimization. It is scoped to a harness/environment/context, has triggers and preconditions, contains operation steps, declares postconditions and side-effect semantics, and carries baseline/candidate performance evidence.
 
-`ExecutionSession` is an adapter-facing action/observation state machine: it authorizes before the first action, emits one action, requires a fresh observation, checks macro checkpoints or reselects a reactive action, and stops on goal, mismatch, unknown state, forbidden state, context change, interruption, or step budget. The caller still executes actions and supplies beliefs/context.
+`authorize_machine_habit` fails closed unless the habit is active, its exact harness/environment scope matches, trigger and preconditions pass, the efficiency gate passes, operations are allowed, approval requirements are met and retry/compensation limits fit the harness.
 
-It does not yet execute an environment, learn policies, estimate beliefs, enforce every declared failure/interruption condition, prove safety, compose options, persist evidence, or integrate with the legacy simulator. Guarded-sequence and goal-conditioned policies are artifact references only. A caller must explicitly interrupt the session when a certificate is revoked or a resource budget is exhausted.
+The efficiency gate requires a comparable input cohort and sample count, protects success/postcondition reliability using Wilson lower bounds, and requires an improvement in a predeclared cost metric.
 
-## Install from a checkout
+## Harnesses
+
+`HarnessProfile` defines the policy/capability boundary. `HarnessAdapter` is the provider-neutral interface for invoking actual operations and returning typed outcomes. No production adapter is included yet.
+
+## Persistent flows
+
+`FlowDefinition` is immutable and versioned. `FlowRun` is separate mutable state. Habit nodes pin an exact habit version. `PersistentFlow` appends events to a `FlowJournal`; `JsonlFlowJournal` provides a local append-only implementation with fsync and single-writer-per-run semantics.
+
+Recovery uses `PersistentFlow.restore(...)` to replay the event history. The instance method `resume()` changes a paused flow back to its saved running/waiting state.
+
+Example lifecycle:
+
+~~~python
+from habitroute.flows import PersistentFlow, JsonlFlowJournal
+
+journal = JsonlFlowJournal("./flow-data")
+run = PersistentFlow.start(definition, "run-0001", journal, {"repo": "project-a"})
+
+# A worker executes the current node using run.idempotency_key.
+# It then records the actual result:
+run.succeed_step({"checks.pass": "true"})
+
+# After process restart:
+run = PersistentFlow.restore(definition, "run-0001", journal)
+~~~
+
+## Important limits
+
+The flow engine does not execute the external operation. Your worker/harness adapter does that. Persisting flow state does not make external effects exactly-once. Classify operations and supply idempotency, deduplication, compensation or manual reconciliation for uncertain outcomes.
+
+JSONL is a local single-writer journal, not a distributed database. Use an appropriate transactional store/lease adapter before multi-worker production use.
+
+## Legacy prototype
+
+`contracts.py` and `execution.py` retain the earlier RL-style route/option experiment scaffolding. They are not the canonical machine-habit API.
+
+## Install and test
 
 ~~~bash
 python -m pip install -e .
-~~~
-
-## Run tests
-
-~~~bash
 python -m unittest discover -s tests -v
 ~~~
-
-## Fail-closed authorization
-
-Call authorize_habit before executing a candidate. Candidate retrieval (including nearest-neighbor retrieval) is not authorization. The authorization gate checks:
-
-1. habit lifecycle is ACTIVE;
-2. exact environment/context scope;
-3. exact representation identity/version for both scope and belief;
-4. certificate identity and exact habit version;
-5. certificate status, evidence count and Wilson lower confidence bound;
-6. belief mass inside the declared initiation region and maximum unknown mass.
-
-The Wilson lower bound is a statistical evidence gate, not a guarantee of future success or formal safety. Thresholds are policy parameters and must be calibrated for the task's risk.
-
-Run `python -m unittest discover -s tests -v` for the core tests. See docs/HABIT_SPEC_v0.1.md for the target contract and docs/CORE_STATUS.md for exact implemented/non-implemented boundaries.
