@@ -13,6 +13,7 @@
 - [x] Separate Machine Habit, Execution Harness and Persistent Flow.
 - [x] Define scope, triggers, operation patterns, postconditions, idempotency, baseline comparison and promotion gates.
 - [x] Implement a dependency-free MachineHabit model and harness authorization.
+- [x] Implement an adapter-driven machine-habit executor with state-bound input resolution, idempotency-key reuse, postcondition checks and uncertain-outcome handoff.
 - [x] Implement an efficiency evaluator using matched baseline/candidate cohorts and reliability lower bounds.
 - [x] Add tests for wrong harness/scope, failed trigger/preconditions, approval, side-effect semantics, inadequate evidence and no efficiency gain.
 
