@@ -406,7 +406,7 @@ class PersistentFlow:
         return flow
 
     @classmethod
-    def resume(
+    def restore(
         cls, definition: FlowDefinition, run_id: str, journal: FlowJournal,
     ) -> "PersistentFlow":
         events = journal.load(run_id)
