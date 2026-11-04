@@ -36,7 +36,7 @@ class PersistentFlowTests(unittest.TestCase):
             self.assertEqual(flow.current_node.node_id, "scan")
             self.assertEqual(flow.idempotency_key, "run-001:nightly-maintenance:3:scan:1")
 
-    def test_retry_uses_new_attempt_key_and_failure_branch(self):
+    def test_retry_preserves_idempotency_key_and_failure_branch(self):
         flow_def = definition()
         with tempfile.TemporaryDirectory() as tmp:
             flow = PersistentFlow.start(flow_def, "run-002", JsonlFlowJournal(tmp))
@@ -44,7 +44,7 @@ class PersistentFlowTests(unittest.TestCase):
             flow.fail_step("temporary")
             self.assertEqual(flow.current_node.node_id, "scan")
             self.assertEqual(flow.snapshot.attempt_count("scan"), 1)
-            self.assertNotEqual(flow.idempotency_key, first_key)
+            self.assertEqual(flow.idempotency_key, first_key)
             flow.fail_step("still-failed")
             self.assertEqual(flow.snapshot.status, FlowStatus.NEEDS_ATTENTION)
             self.assertEqual(flow.current_node.node_id, "manual")
