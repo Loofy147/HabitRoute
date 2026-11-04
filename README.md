@@ -17,6 +17,7 @@ Fixed action macros remain supported for predictable, invariant sequences. Guard
 - [Habit-model research review](docs/HABIT_MODEL_RESEARCH.md) — options, action-sequence formation, composability, predictive state abstraction, successor representations and non-stationarity.
 - [Habit specification v0.1](docs/HABIT_SPEC_v0.1.md) — proposed object contract, lifecycle, evidence, composition and invariants.
 - [Contradictions and gaps](docs/CONTRADICTIONS_AND_GAPS.md) — code-backed defects, severity, repairs and falsifiable tests.
+- [Core implementation status](docs/CORE_STATUS.md) — what the first dependency-free core enforces and what it does not.
 - [Architecture](docs/ARCHITECTURE.md) — target component boundaries.
 - [Roadmap](docs/ROADMAP.md) — implementation order and promotion gates.
 - [Decisions](docs/DECISIONS.md) — accepted design choices and open questions.
