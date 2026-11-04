@@ -56,6 +56,9 @@ class StateBelief:
     representation_version: str
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "probabilities", tuple(sorted(
+            (str(state), float(probability)) for state, probability in self.probabilities
+        )))
         if not self.representation_id.strip() or not self.representation_version.strip():
             raise ValueError("belief representation identity/version must be non-empty")
         if not math.isfinite(self.unknown_mass) or not 0.0 <= self.unknown_mass <= 1.0:
@@ -112,6 +115,7 @@ class InitiationContract:
 class FixedMacro:
     actions: tuple[str, ...]
     expected_states: tuple[str, ...]
+    min_checkpoint_mass: float = 0.95
 
     @property
     def kind(self) -> ControllerKind:
@@ -126,6 +130,8 @@ class FixedMacro:
             raise ValueError("expected_states must contain one initial state plus one state per action")
         if any(not state.strip() for state in self.expected_states):
             raise ValueError("expected states must be non-empty")
+        if not 0.0 <= self.min_checkpoint_mass <= 1.0:
+            raise ValueError("min_checkpoint_mass must be in [0, 1]")
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,6 +232,8 @@ Controller: TypeAlias = FixedMacro | ReactivePolicy | ControllerArtifact
 class TerminationContract:
     success_states: frozenset[str]
     max_steps: int
+    min_success_mass: float = 0.95
+    max_unknown_mass: float = 0.01
     failure_conditions: tuple[str, ...] = ()
     interrupt_conditions: tuple[str, ...] = ("context_change", "safety_guard")
 
@@ -237,6 +245,10 @@ class TerminationContract:
             raise ValueError("termination contract requires at least one success state")
         if self.max_steps <= 0:
             raise ValueError("max_steps must be positive")
+        if not 0.0 <= self.min_success_mass <= 1.0:
+            raise ValueError("min_success_mass must be in [0, 1]")
+        if not 0.0 <= self.max_unknown_mass <= 1.0:
+            raise ValueError("max_unknown_mass must be in [0, 1]")
 
 
 @dataclass(frozen=True, slots=True)
