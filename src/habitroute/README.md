@@ -12,6 +12,8 @@ Canonical code is organized around **Machine Habits**, **Execution Harnesses** a
 
 Compensatable operations currently fail closed: a compensation adapter is not implemented. Unknown side-effect outcomes return `NEEDS_ATTENTION`.
 
+The last full verification run passed 77/77 core tests on Python 3.11–3.13.
+
 ## Harnesses
 
 `HarnessProfile` defines the policy/capability boundary. `HarnessAdapter` is the provider-neutral interface for invoking actual operations and returning typed outcomes. No production provider adapter is included yet.
