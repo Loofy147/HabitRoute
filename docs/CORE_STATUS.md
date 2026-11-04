@@ -23,7 +23,7 @@ Location: src/habitroute/
 
 authorize_habit returns permission to attempt a habit only when the supplied belief, context, habit version, and empirical certificate satisfy the configured contract. Candidate retrieval is separate and must not itself trigger execution.
 
-The Wilson lower bound is an empirical statistical gate over a caller-supplied success count. It is not a guarantee of future behavior, does not account for correlated trials automatically, and is not a formal safety proof.
+The Wilson lower bound is an empirical statistical gate over a caller-supplied success count. Its interpretation assumes reasonably comparable Bernoulli trials within the declared scope; correlated, adaptive or regime-mixed executions can invalidate that interpretation. The current defaults (20 trials and an 0.80 lower bound) are engineering placeholders, not calibrated safety thresholds. The bound is not a guarantee of future behavior or a formal safety proof.
 
 ## Not implemented yet
 
