@@ -40,7 +40,8 @@
 
 - [ ] Separate episode memory, primitive transition evidence and option definitions.
 - [ ] Compare all-contiguous-subsequence enumeration with segmentation at stable subgoals and decision points.
-- [ ] Build a guarded finite-state controller for branching continuations.
+- [x] Add a finite state-conditioned reactive policy baseline for branching continuations.
+- [ ] Build guarded decision-graph and goal-conditioned controllers.
 - [ ] Compare fixed macro and reactive option on the same branching/non-branching tasks.
 - [ ] Measure independent coverage, lookup load, memory, duration and execution quality.
 
