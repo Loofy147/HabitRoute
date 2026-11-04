@@ -2,13 +2,13 @@
 from .contracts import (
     AuthorizationDecision, AuthorizationPolicy, Certificate, CertificateStatus,
     ContextScope, ControllerArtifact, ControllerKind, FixedMacro, HabitLifecycle,
-    HabitSpec, InitiationContract, SafetyContract, StateBelief, TerminationContract,
+    HabitSpec, InitiationContract, PolicyActionDecision, ReactivePolicy, SafetyContract, StateBelief, TerminationContract,
     authorize_habit, wilson_lower_bound,
 )
 
 __all__ = [
     "AuthorizationDecision", "AuthorizationPolicy", "Certificate", "CertificateStatus",
     "ContextScope", "ControllerArtifact", "ControllerKind", "FixedMacro", "HabitLifecycle",
-    "HabitSpec", "InitiationContract", "SafetyContract", "StateBelief", "TerminationContract",
+    "HabitSpec", "InitiationContract", "PolicyActionDecision", "ReactivePolicy", "SafetyContract", "StateBelief", "TerminationContract",
     "authorize_habit", "wilson_lower_bound",
 ]
