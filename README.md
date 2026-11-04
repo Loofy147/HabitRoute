@@ -31,7 +31,8 @@ The initial step-savings study compared usage-based retention with counterfactua
 - observation noise parameter σ = 2;
 - capacity tests at 12, 20, 28 and uncapped;
 - repeated-change tests with five consecutive 30% transition-rewiring events;
-- focused tests: 10/10 passing; built-in assertions: 22/22 passing.
+- legacy experiment tests: 10/10 focused tests and 22/22 built-in assertions;
+- new habit-contract tests: 27/27, including belief-aware initiation, scoped certificates, macro consistency and reactive branching.
 
 The strongest observed capacity-28 results favored step-savings weight 0.5 in the tested worlds. These are experiment-specific results, not statistical proof or a universal policy win. Repeated regime changes remain unresolved. The existing usage-based utility policy remains the overall default; savings is opt-in.
 
