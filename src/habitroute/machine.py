@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 import math
-from typing import Mapping
+from typing import Mapping, Protocol
 
 
 class OperationEffect(str, Enum):
@@ -100,6 +100,47 @@ class HarnessProfile:
             raise ValueError("approval-required operations must be in the allowlist")
         if self.max_step_attempts < 1:
             raise ValueError("max_step_attempts must be at least one")
+
+
+class OperationOutcome(str, Enum):
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True, slots=True)
+class HarnessOperationResult:
+    outcome: OperationOutcome
+    outputs: tuple[tuple[str, str], ...] = ()
+    duration_ms: float = 0.0
+    resource_units: float = 0.0
+    external_cost: float = 0.0
+    error_code: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "outputs", tuple(sorted(self.outputs)))
+        for name in ("duration_ms", "resource_units", "external_cost"):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be finite and non-negative")
+        keys = [key for key, _ in self.outputs]
+        if any(not key.strip() for key in keys) or len(keys) != len(set(keys)):
+            raise ValueError("harness outputs must have unique non-empty keys")
+
+
+class HarnessAdapter(Protocol):
+    """Provider-neutral boundary for one actual machine operation."""
+
+    @property
+    def profile(self) -> HarnessProfile: ...
+
+    def invoke(
+        self,
+        operation: OperationStep,
+        inputs: Mapping[str, str],
+        *,
+        idempotency_key: str,
+    ) -> HarnessOperationResult: ...
 
 
 @dataclass(frozen=True, slots=True)
