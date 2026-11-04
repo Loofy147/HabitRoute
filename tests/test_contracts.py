@@ -1,5 +1,7 @@
 import unittest
 
+from habitroute.execution import ExecutionSession, ExecutionStatus
+
 from habitroute.contracts import (
     AuthorizationPolicy, Certificate, CertificateStatus, ContextScope,
     FixedMacro, HabitLifecycle, HabitSpec, InitiationContract, SafetyContract,
@@ -246,6 +248,186 @@ class HabitContractTests(unittest.TestCase):
         d = policy.select_action(self.belief({"state-a": 1.0}, scope=other))
         self.assertFalse(d.allowed)
         self.assertEqual(d.reason, "representation_version_mismatch")
+
+
+
+
+class ExecutionSessionTests(unittest.TestCase):
+    def setUp(self):
+        self.scope = ContextScope("maze-v1", "daylight", "latent-prototypes", "encoder-sha-1")
+        self.policy = AuthorizationPolicy(min_trials=20, min_success_lcb=0.80)
+        self.certificate = Certificate(
+            "route", 1, self.scope, CertificateStatus.VALID, 100, 99, ("run-1",)
+        )
+
+    def belief(self, probabilities, unknown=0.0, scope=None):
+        scope = scope or self.scope
+        return StateBelief.from_mapping(
+            probabilities, unknown_mass=unknown,
+            representation_id=scope.representation_id,
+            representation_version=scope.representation_version,
+        )
+
+    def macro_habit(self):
+        return HabitSpec(
+            "route", 1, self.scope,
+            InitiationContract(frozenset({"hall"}), 0.95, 0.01),
+            FixedMacro(("forward", "left"), ("hall", "junction", "door")),
+            TerminationContract(frozenset({"door"}), max_steps=2),
+            SafetyContract(forbidden_states=frozenset({"lava"}),
+                           allowed_actions=frozenset({"forward", "left"})),
+            HabitLifecycle.ACTIVE,
+        )
+
+    def test_fixed_macro_executes_checkpoints_and_succeeds(self):
+        habit = self.macro_habit()
+        session, first = ExecutionSession.start(
+            habit, self.belief({"hall": 1.0}), self.scope, self.certificate, self.policy
+        )
+        self.assertEqual(first.status, ExecutionStatus.RUNNING)
+        self.assertEqual(first.action, "forward")
+        middle = session.observe(self.belief({"junction": 1.0}), self.scope)
+        self.assertEqual(middle.status, ExecutionStatus.RUNNING)
+        second = session.next_action(self.belief({"junction": 1.0}), self.scope)
+        self.assertEqual(second.action, "left")
+        done = session.observe(self.belief({"door": 1.0}), self.scope)
+        self.assertEqual(done.status, ExecutionStatus.SUCCESS)
+
+    def test_unknown_initial_belief_does_not_authorize_session(self):
+        session, result = ExecutionSession.start(
+            self.macro_habit(), self.belief({"hall": 0.90, "other": 0.09}, unknown=0.01),
+            self.scope, self.certificate, self.policy,
+        )
+        self.assertIsNone(session)
+        self.assertEqual(result.status, ExecutionStatus.HANDOFF)
+
+    def test_macro_checkpoint_mismatch_hands_off_before_next_action(self):
+        session, first = ExecutionSession.start(
+            self.macro_habit(), self.belief({"hall": 1.0}), self.scope,
+            self.certificate, self.policy,
+        )
+        self.assertEqual(first.action, "forward")
+        failed = session.observe(self.belief({"wrong-room": 1.0}), self.scope)
+        self.assertEqual(failed.status, ExecutionStatus.HANDOFF)
+        self.assertIsNone(session.next_action(self.belief({"wrong-room": 1.0}), self.scope).action)
+
+    def test_context_change_interrupts_running_macro(self):
+        session, _ = ExecutionSession.start(
+            self.macro_habit(), self.belief({"hall": 1.0}), self.scope,
+            self.certificate, self.policy,
+        )
+        new_scope = ContextScope("maze-v1", "night", "latent-prototypes", "encoder-sha-1")
+        result = session.observe(self.belief({"junction": 1.0}), new_scope)
+        self.assertEqual(result.status, ExecutionStatus.INTERRUPTED)
+        self.assertEqual(result.reason, "context_scope_changed")
+
+    def test_unknown_observation_stops_running_macro(self):
+        session, _ = ExecutionSession.start(
+            self.macro_habit(), self.belief({"hall": 1.0}), self.scope,
+            self.certificate, self.policy,
+        )
+        result = session.observe(self.belief({"junction": 0.98}, unknown=0.02), self.scope)
+        self.assertEqual(result.status, ExecutionStatus.UNKNOWN)
+
+    def test_forbidden_state_stops_running_macro(self):
+        session, _ = ExecutionSession.start(
+            self.macro_habit(), self.belief({"hall": 1.0}), self.scope,
+            self.certificate, self.policy,
+        )
+        result = session.observe(self.belief({"lava": 1.0}), self.scope)
+        self.assertEqual(result.status, ExecutionStatus.FAILURE)
+
+    def test_reactive_policy_reselects_action_after_each_observation(self):
+        controller = ReactivePolicy.from_mapping(
+            {"start": "enter", "left-branch": "left", "right-branch": "right"},
+            representation_id=self.scope.representation_id,
+            representation_version=self.scope.representation_version,
+            min_action_mass=0.95,
+        )
+        habit = HabitSpec(
+            "route", 1, self.scope,
+            InitiationContract(frozenset({"start"})), controller,
+            TerminationContract(frozenset({"goal"}), max_steps=4),
+            SafetyContract(allowed_actions=frozenset({"enter", "left", "right"})),
+            HabitLifecycle.ACTIVE,
+        )
+        session, first = ExecutionSession.start(
+            habit, self.belief({"start": 1.0}), self.scope, self.certificate, self.policy
+        )
+        self.assertEqual(first.action, "enter")
+        self.assertEqual(session.observe(self.belief({"left-branch": 1.0}), self.scope).status,
+                         ExecutionStatus.RUNNING)
+        second = session.next_action(self.belief({"left-branch": 1.0}), self.scope)
+        self.assertEqual(second.action, "left")
+        self.assertEqual(session.observe(self.belief({"goal": 1.0}), self.scope).status,
+                         ExecutionStatus.SUCCESS)
+
+    def test_reactive_ambiguity_hands_off_instead_of_guessing(self):
+        controller = ReactivePolicy.from_mapping(
+            {"start": "enter", "left-branch": "left", "right-branch": "right"},
+            representation_id=self.scope.representation_id,
+            representation_version=self.scope.representation_version,
+        )
+        habit = HabitSpec(
+            "route", 1, self.scope, InitiationContract(frozenset({"start"})), controller,
+            TerminationContract(frozenset({"goal"}), max_steps=4), SafetyContract(),
+            HabitLifecycle.ACTIVE,
+        )
+        session, first = ExecutionSession.start(
+            habit, self.belief({"start": 1.0}), self.scope, self.certificate, self.policy
+        )
+        self.assertEqual(first.action, "enter")
+        session.observe(self.belief({"left-branch": 0.50, "right-branch": 0.50}), self.scope)
+        decision = session.next_action(
+            self.belief({"left-branch": 0.50, "right-branch": 0.50}), self.scope
+        )
+        self.assertEqual(decision.status, ExecutionStatus.HANDOFF)
+        self.assertIsNone(decision.action)
+
+    def test_final_allowed_step_can_succeed_before_timeout(self):
+        session, _ = ExecutionSession.start(
+            self.macro_habit(), self.belief({"hall": 1.0}), self.scope,
+            self.certificate, self.policy,
+        )
+        session.observe(self.belief({"junction": 1.0}), self.scope)
+        session.next_action(self.belief({"junction": 1.0}), self.scope)
+        done = session.observe(self.belief({"door": 1.0}), self.scope)
+        self.assertEqual(done.status, ExecutionStatus.SUCCESS)
+
+    def test_observation_without_pending_action_hands_off(self):
+        session, _ = ExecutionSession.start(
+            self.macro_habit(), self.belief({"hall": 1.0}), self.scope,
+            self.certificate, self.policy,
+        )
+        first = session.observe(self.belief({"junction": 1.0}), self.scope)
+        self.assertEqual(first.status, ExecutionStatus.RUNNING)
+        result = session.observe(self.belief({"junction": 1.0}), self.scope)
+        self.assertEqual(result.status, ExecutionStatus.HANDOFF)
+
+    def test_external_interrupt_stops_running_session(self):
+        session, _ = ExecutionSession.start(
+            self.macro_habit(), self.belief({"hall": 1.0}), self.scope,
+            self.certificate, self.policy,
+        )
+        result = session.interrupt("operator_cancelled")
+        self.assertEqual(result.status, ExecutionStatus.INTERRUPTED)
+        self.assertEqual(result.reason, "operator_cancelled")
+
+    def test_macro_checkpoint_uses_its_own_confidence_threshold(self):
+        habit = HabitSpec(
+            "route", 1, self.scope,
+            InitiationContract(frozenset({"hall"}), 0.95, 0.01),
+            FixedMacro(("forward",), ("hall", "door"), min_checkpoint_mass=0.98),
+            TerminationContract(frozenset({"door"}), max_steps=1, min_success_mass=0.99),
+            SafetyContract(allowed_actions=frozenset({"forward"})),
+            HabitLifecycle.ACTIVE,
+        )
+        session, _ = ExecutionSession.start(
+            habit, self.belief({"hall": 1.0}), self.scope, self.certificate, self.policy
+        )
+        result = session.observe(self.belief({"door": 0.97, "hall": 0.03}), self.scope)
+        self.assertEqual(result.status, ExecutionStatus.HANDOFF)
+        self.assertEqual(result.reason, "macro_checkpoint_mismatch")
 
 
 if __name__ == "__main__":
