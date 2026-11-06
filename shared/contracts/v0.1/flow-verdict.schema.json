@@ -136,13 +136,15 @@
           "mining_eligible": {"const": true},
           "immediate_gates_passed": {"const": true},
           "budget_audit": { "properties": { "within_limits": {"const": true}, "dimensions": { "items": { "properties": { "measurement_kind": {"enum": ["observed", "provider_reported"]}, "within_limit": {"const": true} }, "required": ["measurement_kind", "within_limit"] } } } },
-          "constraint_audit": {"properties": {"all_constraints_held": {"const": true}, "violations": {"maxItems": 0}}},
+          "constraint_audit": {"properties": {"all_constraints_held": {"const": true}, "violations": {"maxItems": 0}, "audit_evidence_refs": {"minItems": 1}}},
           "evidence_audit": {
             "properties": {
               "complete": {"const": true},
               "all_digests_valid": {"const": true},
               "independent_verification_passed": {"const": true},
-              "missing_artifacts": {"maxItems": 0}
+              "required_artifacts": {"minimum": 1},
+              "missing_artifacts": {"maxItems": 0},
+              "evidence_refs": {"minItems": 1}
             }
           },
           "intervention_audit": {
