@@ -29,7 +29,13 @@
               "type": "array",
               "minItems": 4,
               "uniqueItems": true,
-              "items": {"enum": ["tokens", "elapsed_time_ms", "tool_calls", "retries"]}
+              "items": {"enum": ["tokens", "elapsed_time_ms", "tool_calls", "retries"]},
+              "allOf": [
+                {"contains": {"const": "tokens"}},
+                {"contains": {"const": "elapsed_time_ms"}},
+                {"contains": {"const": "tool_calls"}},
+                {"contains": {"const": "retries"}}
+              ]
             },
             "measurement_required": {"const": true},
             "unknown_measurement_outcome": {"const": "provisional_budget_unobservable"}
