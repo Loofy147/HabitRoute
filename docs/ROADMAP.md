@@ -2,6 +2,23 @@
 
 This roadmap separates the existing HabitRoute core from the broader Unified Agent Runtime integration. Checkboxes reflect the inspected 2026-11-06 snapshot; future completion requires evidence.
 
+## Precondition for discovery — hand-design before mining
+
+**Design status: COMPLETE ON DRAFT PR #4. Runtime enforcement: NOT IMPLEMENTED.**
+
+- [x] Hand-design `repo-change-verification/v1` before mining any execution traces.
+- [x] Define one-sentence intent, invariants, decision points, evidence requirements and constraints.
+- [x] Define complete inspection, per-path validation and safe-skip fingerprint rules.
+- [x] Separate immutable decision-time records from later decision outcomes.
+- [x] Define typed trace, decision, decision-outcome and flow-verdict schemas.
+- [x] Define `VERIFIED_AT_END` versus later same-digest `SUCCESS_HELD`.
+- [x] Add schema, graph and negative held-success contract tests; CI passed 97 tests on Python 3.11, 3.12 and 3.13 in run [42231017168](https://github.com/Loofy147/HabitRoute/actions/runs/42231017168).
+- [ ] Implement the schemas in the runtime, durable trace/decision stores and semantic validators.
+- [ ] Enforce budgets, evidence completeness, intervention observability and later revalidation.
+- [ ] Execute this habit across independent read-only repository tasks and retain verifiable records.
+
+**Gate:** no mining until runtime-produced traces and separate decision/outcome records are complete, independently verified, budgeted, and revalidated. PR #4 contains design and schema tests only; it does not activate the habit.
+
 ## P0 — Preserve and reproduce existing research
 
 - [x] Preserve the synthetic step-savings experiment and reports.
@@ -92,4 +109,4 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 
 ## Immediate next task
 
-Begin with per-operation checkpoints and crash/recovery semantics in HabitRoute. In parallel, import CPM unchanged into the monorepo only after its source manifest and notices are reviewed. Do not build an autonomous side-effecting runtime before the durability gate passes.
+Complete review of the architecture preparation PR and the dependent hand-design PR. Then implement the trace and separate decision/outcome persistence contracts with semantic validation and replay tests. In the same runtime phase, close the per-operation checkpoint and crash/reconciliation gaps before enabling side-effecting multi-step habits. Import CPM unchanged only after its source manifest and notices are reviewed. Do not mine historical conversation/log material or build an autonomous side-effecting runtime before these gates pass.
