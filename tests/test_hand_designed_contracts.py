@@ -92,6 +92,7 @@ def held_verdict():
 def trace_event():
     return {
         "schema_version": "0.1",
+        "canonicalization": "habitroute-json-v1",
         "event_id": "event-0001",
         "flow_id": "repo-change-verification",
         "flow_version": "1.0.0",
