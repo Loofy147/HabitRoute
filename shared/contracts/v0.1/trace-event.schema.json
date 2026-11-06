@@ -71,6 +71,10 @@
     "intervention": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {"if": {"properties": {"occurred": {"const": false}}, "required": ["occurred"]}, "then": {"properties": {"kind": {"const": null}}}},
+        {"if": {"properties": {"occurred": {"const": true}}, "required": ["occurred"]}, "then": {"properties": {"kind": {"enum": ["APPROVAL", "ASSISTANCE", "RESCUE", "UNOBSERVED"]}}}}
+      ],
       "required": ["occurred", "kind"],
       "properties": {
         "occurred": {"type": "boolean"},
