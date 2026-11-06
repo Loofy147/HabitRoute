@@ -4,7 +4,7 @@
 **Observed runtime-code baseline:** `43d714c8760a15026e0acb966919f483d893e7d0`  
 **Integration-documentation base:** `e81d8f1ec07d53023e77063c1d1964f976549a66`  
 **PR #4 hand-design branch head:** `8facb898fa7734978dd6b9e0bd2ee934688c7d9e` (draft)  
-**Current research branch head:** `5ee042185ae027fd5e4fa9660156162b978fb11f` (PR #6 draft; based on PR #4)  
+**Research implementation/test head:** `0409487664a599884a6677cb84ed02460dc87cac` (PR #6 draft; based on PR #4; the following status-record update is documentation-only)  
 **Package:** `habitroute` 0.1.0.dev0 (experimental; not a stable production runtime)
 
 ## Canonical machine-habit core
@@ -62,7 +62,7 @@ The extension is **not runtime functionality**. HabitRoute still has no trace-ba
 
 The protocol requires held-success, independently revalidated traces before experience-driven proposal mining; fresh matched baseline/adapted trials; separate opportunity, action, adaptation-loading and task-outcome observations; per-dimension cost and unrelated-work accounting; and human review plus rollback before activation.
 
-PR #6 CI run [42313250815](https://github.com/Loofy147/HabitRoute/actions/runs/42313250815) passed **104 tests on each of Python 3.11, 3.12 and 3.13**. This includes the new adaptation schema tests and a trace fixture correction for the canonicalization field made mandatory by the latest v0.1 trace schema.
+PR #6's first CI run identified a stale hand-designed trace fixture after the v0.1 trace schema made canonicalization mandatory; the fixture was corrected in the follow-on branch. The corrected run [42313250815](https://github.com/Loofy147/HabitRoute/actions/runs/42313250815) passed 104 tests per Python version. After adding explicit negative tests and schema constraints for NET_BENEFIT, final run [42313443509](https://github.com/Loofy147/HabitRoute/actions/runs/42313443509) passed **106 tests on each of Python 3.11, 3.12 and 3.13**.
 
 ## Important execution boundary
 
