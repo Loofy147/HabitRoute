@@ -1,0 +1,581 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://habitroute.dev/contracts/adaptation/v0.1/evaluation.schema.json",
+  "title": "HabitRoute Adaptation Evaluation",
+  "description": "Derived report over immutable raw paired trials; not itself promotion authorization.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evaluation_id",
+    "proposal_id",
+    "evaluation_plan_sha256",
+    "derived_at",
+    "evaluator",
+    "raw_trial_refs",
+    "raw_trials_sha256",
+    "counts",
+    "primary_effect",
+    "quality_gate",
+    "constraint_gate",
+    "adaptation_loading",
+    "cost_effects",
+    "unrelated_work",
+    "verdict",
+    "promotion_recommendation"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "adaptation/0.1"
+    },
+    "evaluation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "proposal_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evaluation_plan_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "derived_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "evaluator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "implementation_sha256"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "implementation_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "raw_trial_refs": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "raw_trials_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempted_pairs",
+        "complete_pairs",
+        "opportunity_pairs",
+        "baseline_recurrences",
+        "adapted_recurrences",
+        "baseline_only_recurrences",
+        "adapted_only_recurrences"
+      ],
+      "properties": {
+        "attempted_pairs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "complete_pairs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "opportunity_pairs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "baseline_recurrences": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "adapted_recurrences": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "baseline_only_recurrences": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "adapted_only_recurrences": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "primary_effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric",
+        "baseline_rate",
+        "adapted_rate",
+        "risk_difference",
+        "interval_low",
+        "interval_high",
+        "confidence_level",
+        "method",
+        "adjusted_alpha",
+        "p_value",
+        "directional_evidence"
+      ],
+      "properties": {
+        "metric": {
+          "const": "target_action_recurrence"
+        },
+        "baseline_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "adapted_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "risk_difference": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "interval_low": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "interval_high": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "confidence_level": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "adjusted_alpha": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 0.1
+        },
+        "p_value": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "directional_evidence": {
+          "type": "boolean"
+        }
+      }
+    },
+    "quality_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline_successes",
+        "adapted_successes",
+        "evaluated_pairs",
+        "observed_success_difference",
+        "noninferiority_margin",
+        "lower_confidence_bound",
+        "passed"
+      ],
+      "properties": {
+        "baseline_successes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "adapted_successes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evaluated_pairs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "observed_success_difference": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1
+        },
+        "noninferiority_margin": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "lower_confidence_bound": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": -1,
+          "maximum": 1
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "constraint_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "passed",
+        "adapted_violation_count",
+        "unobserved_intervention_pairs",
+        "details"
+      ],
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "adapted_violation_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unobserved_intervention_pairs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "adaptation_loading": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "adapted_trials",
+        "loaded_trials",
+        "unknown_load_trials",
+        "loading_rate"
+      ],
+      "properties": {
+        "adapted_trials": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "loaded_trials": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown_load_trials": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "loading_rate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "cost_effects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "metric",
+          "unit",
+          "paired_samples",
+          "baseline_mean",
+          "adapted_mean",
+          "relative_change",
+          "interpretation"
+        ],
+        "properties": {
+          "metric": {
+            "type": "string",
+            "minLength": 1
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1
+          },
+          "paired_samples": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "baseline_mean": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "adapted_mean": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "relative_change": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "interpretation": {
+            "enum": [
+              "improved",
+              "regressed",
+              "unchanged",
+              "unknown",
+              "not_comparable"
+            ]
+          }
+        }
+      }
+    },
+    "unrelated_work": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "new_action_count",
+        "new_action_evidence_refs",
+        "material_overhead_observed"
+      ],
+      "properties": {
+        "new_action_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "new_action_evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "material_overhead_observed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "verdict": {
+      "enum": [
+        "INSUFFICIENT_EVIDENCE",
+        "NOT_APPLICABLE",
+        "NO_EFFECT",
+        "TARGET_REDUCTION_ONLY",
+        "NET_BENEFIT",
+        "MIXED_EFFECT",
+        "HARMFUL",
+        "INVALIDATED",
+        "CONFOUNDED"
+      ]
+    },
+    "promotion_recommendation": {
+      "enum": [
+        "collect_more_data",
+        "reject",
+        "revise",
+        "human_review",
+        "not_recommended"
+      ]
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "verdict": {
+            "const": "NET_BENEFIT"
+          }
+        },
+        "required": [
+          "verdict"
+        ]
+      },
+      "then": {
+        "properties": {
+          "promotion_recommendation": {
+            "const": "human_review"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "verdict": {
+            "const": "HARMFUL"
+          }
+        },
+        "required": [
+          "verdict"
+        ]
+      },
+      "then": {
+        "properties": {
+          "promotion_recommendation": {
+            "const": "reject"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "verdict": {
+            "const": "INSUFFICIENT_EVIDENCE"
+          }
+        },
+        "required": [
+          "verdict"
+        ]
+      },
+      "then": {
+        "properties": {
+          "promotion_recommendation": {
+            "const": "collect_more_data"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "verdict": {
+            "const": "INVALIDATED"
+          }
+        },
+        "required": [
+          "verdict"
+        ]
+      },
+      "then": {
+        "properties": {
+          "promotion_recommendation": {
+            "const": "reject"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "verdict": {
+            "const": "NET_BENEFIT"
+          }
+        },
+        "required": [
+          "verdict"
+        ]
+      },
+      "then": {
+        "properties": {
+          "primary_effect": {
+            "properties": {
+              "directional_evidence": {
+                "const": true
+              },
+              "risk_difference": {
+                "exclusiveMaximum": 0
+              },
+              "interval_high": {
+                "exclusiveMaximum": 0
+              }
+            }
+          },
+          "quality_gate": {
+            "properties": {
+              "passed": {
+                "const": true
+              }
+            }
+          },
+          "constraint_gate": {
+            "properties": {
+              "passed": {
+                "const": true
+              },
+              "adapted_violation_count": {
+                "const": 0
+              },
+              "unobserved_intervention_pairs": {
+                "const": 0
+              }
+            }
+          },
+          "unrelated_work": {
+            "properties": {
+              "material_overhead_observed": {
+                "const": false
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "verdict": {
+            "const": "NET_BENEFIT"
+          }
+        },
+        "required": [
+          "verdict"
+        ]
+      },
+      "then": {
+        "properties": {
+          "promotion_recommendation": {
+            "const": "human_review"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "promotion_recommendation": {
+            "not": {
+              "const": "human_review"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

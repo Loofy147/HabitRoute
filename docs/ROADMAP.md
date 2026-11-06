@@ -6,18 +6,20 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 
 **Design status: COMPLETE ON DRAFT PR #4. Runtime enforcement: NOT IMPLEMENTED.**
 
-- [x] Hand-design `repo-change-verification/v1` before mining any execution traces.
+- [x] Hand-design repo-change-verification/v1 before mining any execution traces.
 - [x] Define one-sentence intent, invariants, decision points, evidence requirements and constraints.
 - [x] Define complete inspection, per-path validation and safe-skip fingerprint rules.
 - [x] Separate immutable decision-time records from later decision outcomes.
 - [x] Define typed trace, decision, decision-outcome and flow-verdict schemas.
-- [x] Define `VERIFIED_AT_END` versus later same-digest `SUCCESS_HELD`.
+- [x] Define VERIFIED_AT_END versus later same-digest SUCCESS_HELD.
 - [x] Add schema, graph and negative held-success contract tests; CI passed 97 tests on Python 3.11, 3.12 and 3.13 in run [42231017168](https://github.com/Loofy147/HabitRoute/actions/runs/42231017168).
+- [x] Specify proposal provenance, matched transfer evaluation, opportunity/action/loading separation and no-auto-activation rules in [RETROSPECTIVE_ADAPTATION_PROTOCOL.md](RETROSPECTIVE_ADAPTATION_PROTOCOL.md).
+- [x] Add draft proposal, trial and evaluation schemas plus schema-level negative tests.
 - [ ] Implement the schemas in the runtime, durable trace/decision stores and semantic validators.
 - [ ] Enforce budgets, evidence completeness, intervention observability and later revalidation.
 - [ ] Execute this habit across independent read-only repository tasks and retain verifiable records.
 
-**Gate:** no mining until runtime-produced traces and separate decision/outcome records are complete, independently verified, budgeted, and revalidated. PR #4 contains design and schema tests only; it does not activate the habit.
+**Gate:** no mining until runtime-produced traces and separate decision/outcome records are complete, independently verified, budgeted and revalidated. The adaptation protocol and its schemas are design artifacts only; they do not activate the habit or authorize mining.
 
 ## P0 — Preserve and reproduce existing research
 
@@ -65,18 +67,24 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 
 **Gate:** a harness control is only marked enforced after deny-path tests prove the provider boundary rejects prohibited actions.
 
-## P4 — Evidence-backed habit discovery and promotion
+## P4 — Evidence-backed retrospective adaptation and habit promotion
 
-- [ ] Ingest operation traces with immutable provenance.
-- [ ] Normalize repeated operations and parameter bindings.
-- [ ] Discover repeated subflows, redundant calls and reusable patterns.
-- [ ] Propose narrow candidates with explicit triggers/preconditions.
-- [ ] Store raw paired baseline/candidate trial records and exact input/case digests.
-- [ ] Independently verify outputs and side effects.
-- [ ] Add shadow evaluation, staged promotion, monitoring, drift detection and quarantine.
-- [ ] Make a durable exact-version HabitRegistry.
+- [ ] Ingest structured traces with immutable provenance; accept only eligible held-success runs as experience-driven evidence.
+- [ ] Classify every proposal as experience-driven, prior-driven, weak or mixed; retain exact event/prior references and a causal link.
+- [ ] Normalize repeated target actions and parameter bindings; define the environmental opportunity separately from action recurrence.
+- [ ] Propose narrow, non-executable candidates with explicit target scope, mechanism, hypothesis, side effects and rollback.
+- [ ] Keep each candidate to one logical change unit so transfer effects remain attributable.
+- [ ] Preregister matched baseline/adapted task pairs, sample-size rationale, non-inferiority margin, uncertainty method and multiple-comparison handling.
+- [ ] Store raw paired trials with identical case/input/task/environment/agent/model/base-harness fingerprints.
+- [ ] Record target opportunity, target action observation, adaptation loading and task outcome as separate fields.
+- [ ] Use intention-to-treat recurrence comparisons; report adaptation loading as a diagnostic rather than filtering unexposed treatment sessions.
+- [ ] Independently verify outputs and side effects; retain unknowns, failed trials, intervention evidence and exclusions.
+- [ ] Measure unrelated work and separate cost dimensions including tokens, context, calls, latency, compute, money, retries, recovery and verification overhead.
+- [ ] Add deterministic evaluation from raw trials; reject empty, incomplete, mismatched, confounded or unverified evidence.
+- [ ] Permit only NET_BENEFIT to reach human review; never auto-activate a retrospective proposal.
+- [ ] Add shadow evaluation, staged human approval, monitoring, drift detection, quarantine, rollback and a durable exact-version HabitRegistry.
 
-**Gate:** mutation-tested promotion cannot pass on empty, incomplete, mismatched or unverified evidence.
+**Gate:** target-action recurrence reduction alone is insufficient. Promotion requires quality non-inferiority, hard constraints, evidence integrity, cost/side-effect checks, human approval and a rollback path. Inconclusive or harmful candidates remain recorded and cannot be silently discarded.
 
 ## P5 — Expand machine-operation economics research
 
@@ -88,10 +96,10 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 
 ## P6 — Unified Agent Runtime integration
 
-- [ ] Import CPM v0.5.0 under `packages/contextpm/`, preserving `contextpm` and `cheg`.
+- [ ] Import CPM v0.5.0 under packages/contextpm/, preserving contextpm and cheg.
 - [ ] Keep CPM and HabitRoute independently installable and free of circular imports.
-- [ ] Freeze shared contracts under `shared/contracts/`.
-- [ ] Add runtime composition under `runtime/unified_agent_runtime/`.
+- [ ] Freeze shared contracts under shared/contracts/.
+- [ ] Add runtime composition under runtime/unified_agent_runtime/.
 - [ ] Start with read-only context-to-habit planning and explainable dry-run output.
 - [ ] Pin package/source versions and context manifest digests per run.
 - [ ] Add component-absence tests proving each package works alone.
@@ -109,4 +117,4 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 
 ## Immediate next task
 
-Complete review of the architecture preparation PR and the dependent hand-design PR. Then implement the trace and separate decision/outcome persistence contracts with semantic validation and replay tests. In the same runtime phase, close the per-operation checkpoint and crash/reconciliation gaps before enabling side-effecting multi-step habits. Import CPM unchanged only after its source manifest and notices are reviewed. Do not mine historical conversation/log material or build an autonomous side-effecting runtime before these gates pass.
+Continue in dependency order: review and settle the architecture preparation and hand-design PRs; implement runtime trace plus separate decision/outcome persistence and semantic validation; close per-operation checkpoint and crash/reconciliation gaps; enforce and independently revalidate the read-only reference habit. Only then run retrospective collection and matched transfer trials. Import CPM unchanged only after its source manifest and notices are reviewed. Do not mine historical conversation/log material or build an autonomous side-effecting runtime before these gates pass.
