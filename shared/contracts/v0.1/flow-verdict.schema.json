@@ -104,7 +104,8 @@
       "properties": {
         "unchanged_during_run": {"type": "boolean"},
         "initial_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "terminal_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},\n        "digest_equality_verified": {"type": "boolean"}
+        "terminal_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "digest_equality_verified": {"type": "boolean"}
       }
     },
     "immediate_gates_passed": {"type": "boolean"},
