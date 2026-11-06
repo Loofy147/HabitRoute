@@ -1,6 +1,7 @@
-# HabitRoute Core — implementation status
+# HabitRoute Core — Implementation Status
 
-**Status date:** 2026-11-04  
+**Status date:** 2026-11-06  
+**Observed source baseline:** `43d714c8760a15026e0acb966919f483d893e7d0`  
 **Package:** `habitroute` 0.1.0.dev0 (experimental; not a stable production runtime)
 
 ## Canonical machine-habit core
@@ -8,15 +9,15 @@
 ### `src/habitroute/machine.py`
 
 - Immutable machine-habit identity/version and harness/environment/context scope.
-- Trigger and precondition predicates, parameter bindings and postconditions.
+- Trigger and precondition predicates, input bindings and postconditions.
 - Operation steps classified as read-only, idempotent, deduplicated, compensatable or non-repeatable.
 - Harness profile with operation allowlist, approval-required operations, attempt ceiling and compensation capability declaration.
 - Provider-neutral `HarnessAdapter` protocol and typed operation outcomes/results.
-- Baseline/candidate performance profiles tied to the same cohort and sample count.
+- Baseline/candidate aggregate performance profiles tied to a cohort label and sample count.
 - Efficiency gate using Wilson lower bounds for success and postcondition reliability, plus improvement in a declared latency/call/resource/recovery metric.
 - Fail-closed machine-habit authorization.
-- `execute_machine_habit`: invokes a sequence through the harness adapter, resolves literal or `$state.key` inputs, reuses a logical-step idempotency key across retries, collects execution records, verifies postconditions, and stops on unknown outcomes.
-- Compensatable steps explicitly hand off until a real compensation adapter exists; no rollback is simulated.
+- Adapter-driven machine-habit executor with input binding, stable logical-step idempotency key across retries, execution records, postcondition checks and unknown-outcome handoff.
+- Compensatable steps remain unavailable until a real compensation adapter/API exists.
 
 ### `src/habitroute/flows.py`
 
@@ -25,31 +26,58 @@
 - Deterministic event reducer with contiguous sequence validation and duplicate-event idempotency.
 - Persistent run controller for start, step success/failure, unknown outcome, branch resolution, wait release, pause/resume, cancellation and needs-attention escalation.
 - Stable per-run/per-flow-version/per-node/per-attempt idempotency keys.
-- Local append-only JSONL journal that validates sequence continuity and fsyncs committed events.
+- Local append-only JSONL journal with sequence validation and fsync.
 - Recovery by replaying the journal into the flow reducer.
 - Single-writer-per-run contract.
 
+### `src/habitroute/worker.py`
+
+- `FlowWorker.dispatch()` dispatches one current flow node per call.
+- Handles ordinary operation nodes and exact-version machine-habit nodes.
+- Checks operation allowlist, approval and attempt ceiling before ordinary operation invocation.
+- Records operation outcome/cost metadata and checks postconditions for ordinary operation nodes.
+- Uses `HabitRegistry` for exact-version lookup; the registry is in memory, not durable.
+- Routes ambiguous adapter outcomes to `NEEDS_ATTENTION`.
+- Tests use a `StubHarness`; no production provider adapter was found.
+
+## Important execution boundary
+
+The worker exists; older status text and issue bodies that say it is missing are stale. However, the ordinary operation-node path and multi-operation habit path have different checkpoint granularity.
+
+For a multi-operation habit, the worker calls the sequence executor and commits the flow event after that sequence returns. It does not currently commit an independent flow event/checkpoint after each individual operation. A crash after one external side effect but before the sequence result is committed can therefore leave partial effects without per-operation flow progress. This is the highest-priority durability gap.
+
 ## Verification
 
-- Core suites are `tests/test_contracts.py` (historical prototype), `tests/test_machine_habits.py` and `tests/test_persistent_flows.py`.
-- The full suite passed **77/77 tests** on Python 3.11, 3.12 and 3.13 at commit `090fc7c3fddbc95c7b128045fa7a20ab3dd63400`; later export/documentation changes have their own CI runs.
+- GitHub Actions workflow: `.github/workflows/tests.yml`.
+- Latest observed run: [41841168040](https://github.com/Loofy147/HabitRoute/actions/runs/41841168040).
+- Commit: `43d714c8760a15026e0acb966919f483d893e7d0`.
+- Conclusion: success on Python 3.11, 3.12 and 3.13.
+- Exact latest test count was not captured.
+- Historical 77/77 count applies to commit `090fc7c3fddbc95c7b128045fa7a20ab3dd63400`, not the latest commit.
 - Legacy simulator tests remain under `experiments/step_savings_v1/`.
-- GitHub Actions runs Python 3.11, 3.12 and 3.13, installs the package, runs the legacy regression suite and discovers all core tests. Check the latest run on the repository Actions page for the commit-specific result.
 
-## What is not implemented
+## Not implemented or not proven
 
-- No production adapter invokes external APIs, CLIs, repositories, scripts or agent runtimes. The protocol and test adapters exist, but real providers are not connected.
-- No flow worker yet dispatches each persistent-flow node to the harness and commits the returned result automatically. The run controller and machine-habit executor are separate primitives.
-- No central habit registry, trace-ingestion pipeline, automatic habit discovery or automated promotion workflow. Baseline and candidate performance profiles are caller-supplied.
-- No transactional coordination between external operations and the flow journal.
-- Compensatable operations are represented, but `execute_machine_habit` currently fails closed before invoking them because a compensation adapter/API is not yet implemented.
-- No external SQL/event store, multi-writer lease, distributed lock or clustered workflow execution. `JsonlFlowJournal` is a local filesystem journal with one writer per run.
-- No snapshot compaction; recovery replays the complete event journal.
-- No timer scheduler, callback receiver or approval service; a caller invokes wait-release and supplies approvals.
-- Exactly-once external side effects are not guaranteed. Adapters need idempotency/deduplication or manual reconciliation for uncertain outcomes.
+- No production adapter invokes external APIs, CLIs, repositories, scripts or agent runtimes.
+- No production-grade provider enforcement for credentials, egress, hard resource/time budgets, cancellation or output limits.
+- No per-operation durable checkpoints inside a multi-operation habit invocation.
+- No transactional coordination between external operations and the local flow journal.
+- No guarantee of exactly-once external side effects.
+- No durable habit registry; current registry is in-memory exact-version lookup.
+- No trace-ingestion pipeline, automatic candidate discovery, paired-trial evidence system or automated promotion/quarantine.
+- Efficiency profiles are caller-supplied aggregates; cohort label equality does not prove matching raw case identities or independent verification.
+- Cost propagation is incomplete across multi-operation habit records and flow metadata; token, context, compute and memory measurements are not comprehensive.
+- No external SQL/event store, distributed lock/lease or multi-worker-per-run support.
+- No snapshot compaction; replay reads the full local event journal.
+- No timer scheduler, callback receiver or approval service.
 - No automatic migration of a running flow to a new definition or habit version.
-- The earlier `contracts.py` and `execution.py` remain an RL-style route/option prototype and are not the canonical machine-habit model.
+- The earlier `contracts.py` and `execution.py` remain an RL-style route/option prototype and are not canonical.
 
-## Immediate next build
+## Immediate engineering priorities
 
-Build a flow worker that loads a pinned run, resolves its current operation/habit node, authorizes and invokes the machine habit through a harness adapter, independently verifies outputs, and commits the flow event before advancing. Then add crash-after-side-effect-before-acknowledgement fault injection and provider-specific idempotency/reconciliation tests.
+1. Add operation-level intent/result/checkpoint records for multi-operation habits.
+2. Define idempotency/reconciliation semantics and inject crashes around provider side effects.
+3. Replace caller-supplied aggregates as the sole efficiency evidence with raw paired trial records and independent verification.
+4. Propagate a typed cost vector from operation through habit and flow.
+5. Add a concrete read-only harness adapter and prove actual policy enforcement.
+6. Add durable exact-version habit storage and staged discovery/promotion only after evidence controls are in place.
