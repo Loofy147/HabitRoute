@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_version": "1.0.0",
+  "habit_id": "repo-change-verification",
+  "habit_version": "1.0.0",
+  "status": "hand_designed_not_runtime_enforced",
+  "mode": "read_only",
+  "intent": "Verify a repository change without modifying it, and emit a success verdict only when inspection, applicable validation, evidence, budget, constraint and later-hold conditions are all satisfied.",
+  "policy_requirements": {
+    "constraint_policy": "required_immutable_id_version_digest",
+    "read_only_capability_profile": "required",
+    "budget_contract": {
+      "required_dimensions": ["tokens", "elapsed_time_ms", "tool_calls", "retries"],
+      "measurement_required": true,
+      "unknown_measurement_outcome": "provisional_budget_unobservable"
+    },
+    "evidence_store": "append_only_access_controlled",
+    "intervention_observability": "required_for_autonomous_success"
+  },
+  "nodes": [
+    {
+      "id": "bind_task",
+      "kind": "preflight",
+      "purpose": "Bind repository identity, workspace, baseline and target, task objective, acceptance criteria, policy version, read-only capabilities, budgets and evidence destination.",
+      "required_inputs": ["repository_identity", "workspace_root", "base_revision", "target_revision_or_snapshot", "objective", "acceptance_criteria", "constraint_policy", "capabilities", "budgets", "evidence_destination"],
+      "decisions": ["DEC-BASELINE-DEFINED", "DEC-POLICY-APPLICABLE"],
+      "on_pass": "preflight_workspace",
+      "on_unknown_or_fail": "BLOCKED"
+    },
+    {
+      "id": "preflight_workspace",
+      "kind": "observation",
+      "purpose": "Verify repository root, source refs, branch/worktree state, available read-only tools and absence of unauthorized mutation capability.",
+      "required_observations": ["repository_root_match", "base_target_resolved", "git_status_including_untracked", "toolchain_identity", "policy_digest_match"],
+      "decisions": ["DEC-WORKSPACE-SAFE"],
+      "on_pass": "inventory_change",
+      "on_unknown_or_fail": "BLOCKED"
+    },
+    {
+      "id": "inventory_change",
+      "kind": "observation",
+      "purpose": "Enumerate tracked and untracked paths, additions, modifications, deletions, renames, binaries, generated files, submodules and relevant dependency/configuration closure.",
+      "required_outputs": ["complete_change_manifest", "per_path_content_digest", "inventory_digest"],
+      "decisions": ["DEC-SCOPE-COMPLETE"],
+      "on_pass": "inspect_all_paths",
+      "on_unknown_or_fail": "INCOMPLETE"
+    },
+    {
+      "id": "inspect_all_paths",
+      "kind": "inspection",
+      "purpose": "Inspect every changed path and relevant dependency, interface, caller, test and configuration context; record per-path inspection evidence.",
+      "required_outputs": ["per_path_inspection_records", "affected_surface_map", "findings"],
+      "decisions": ["DEC-INSPECTION-COMPLETE"],
+      "on_pass": "plan_validation",
+      "on_unknown_or_fail": "INCOMPLETE"
+    },
+    {
+      "id": "plan_validation",
+      "kind": "decision",
+      "purpose": "Select validation level and exact commands for each changed path and affected behavior using the hand-authored validation matrix.",
+      "required_outputs": ["path_to_validation_matrix", "required_validation_targets"],
+      "decisions": ["DEC-VALIDATION-PLAN"],
+      "on_pass": "evaluate_safe_skip",
+      "on_unknown_or_fail": "NEEDS_ATTENTION"
+    },
+    {
+      "id": "evaluate_safe_skip",
+      "kind": "decision",
+      "purpose": "Evaluate each validation target independently against the complete fingerprint and prior verified evidence; an unknown input always means execute.",
+      "required_outputs": ["per_target_fingerprint_manifest", "skip_or_execute_decision", "prior_evidence_refs_if_skipped"],
+      "decisions": ["DEC-SAFE-SKIP-PER-TARGET"],
+      "on_pass": "execute_required_validation",
+      "on_unknown_or_fail": "execute_required_validation"
+    },
+    {
+      "id": "execute_required_validation",
+      "kind": "validation",
+      "purpose": "Execute all non-skipped validations through allowlisted read-only/repeatable commands, record complete outputs/costs and preserve failures.",
+      "required_outputs": ["validation_run_records", "stdout_stderr_artifact_refs", "exit_states", "cost_observations"],
+      "decisions": ["DEC-RETRY-OR-STOP"],
+      "on_all_pass": "verify_evidence",
+      "on_deterministic_failure": "FAILED",
+      "on_transient_safe_failure_with_budget": "execute_required_validation",
+      "on_unknown_or_unsafe_failure": "NEEDS_ATTENTION"
+    },
+    {
+      "id": "verify_evidence",
+      "kind": "independent_verification",
+      "purpose": "Validate artifact existence, readability, digest, source/policy binding, command identity and claim-to-evidence relevance.",
+      "required_outputs": ["evidence_validation_report", "required_artifact_completeness", "independent_verifier_identity"],
+      "decisions": ["DEC-EVIDENCE-COMPLETE"],
+      "on_pass": "verify_target_unchanged",
+      "on_fail_or_unknown": "INCOMPLETE"
+    },
+    {
+      "id": "verify_target_unchanged",
+      "kind": "independent_verification",
+      "purpose": "Recompute the relevant source and inventory fingerprints; compare them with the captured target and inspect intervention records.",
+      "required_outputs": ["terminal_source_fingerprint", "intervention_audit", "constraint_audit", "budget_audit"],
+      "decisions": ["DEC-NO-RESCUE-AND-CONSTRAINTS-HELD", "DEC-BUDGET-WITHIN-LIMIT"],
+      "on_pass": "VERIFIED_AT_END",
+      "on_drift_or_unrecorded_intervention": "INVALIDATED",
+      "on_unknown_intervention_or_budget": "PROVISIONAL_BUDGET_UNOBSERVABLE"
+    },
+    {
+      "id": "later_revalidation",
+      "kind": "wait_and_revalidate",
+      "purpose": "Wait for independent CI or an authorized verifier bound to the exact same immutable source digest; append the result without editing earlier trace or decision records.",
+      "required_outputs": ["revalidation_event", "same_source_digest_confirmation", "later_verifier_evidence"],
+      "decisions": ["DEC-RESULT-HELD-LATER"],
+      "on_pass": "SUCCESS_HELD",
+      "on_failure": "INVALIDATED",
+      "on_missing_or_different_digest": "VERIFIED_AT_END"
+    }
+  ],
+  "terminal_states": {
+    "SUCCESS_HELD": {
+      "success": true,
+      "mining_eligible": true,
+      "required": ["all_immediate_gates_pass", "complete_evidence", "budgets_measured_and_within_limit", "constraints_held", "no_hidden_rescue", "same_digest_later_revalidation_passed"]
+    },
+    "VERIFIED_AT_END": {
+      "success": false,
+      "provisional": true,
+      "mining_eligible": false,
+      "reason": "Immediate local gates passed, but later independent same-digest revalidation is unavailable or incomplete."
+    },
+    "FAILED": {"success": false, "mining_eligible": false},
+    "BLOCKED": {"success": false, "mining_eligible": false},
+    "NEEDS_ATTENTION": {"success": false, "mining_eligible": false},
+    "ASSISTED": {"success": false, "mining_eligible": false},
+    "INCOMPLETE": {"success": false, "mining_eligible": false},
+    "INVALIDATED": {"success": false, "mining_eligible": false},
+    "PROVISIONAL_BUDGET_UNOBSERVABLE": {"success": false, "mining_eligible": false}
+  },
+  "global_constraints": [
+    "No source, test, configuration, branch, commit, push, merge, release or deployment mutation.",
+    "No unapproved command or capability escalation.",
+    "No evidence deletion, replacement or post-hoc rewriting.",
+    "No deterministic-failure retry.",
+    "No validation skip without a complete matching fingerprint and independently validated prior evidence.",
+    "No raw credentials or secret values in traces.",
+    "No success classification from an executor exit code alone.",
+    "No mining or active-version mutation during execution."
+  ]
+}
