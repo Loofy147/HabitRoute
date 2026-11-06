@@ -1,0 +1,283 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://habitroute.dev/contracts/adaptation/v0.1/trial.schema.json",
+  "title": "HabitRoute Adaptation Transfer Trial",
+  "description": "One immutable observation from one arm of a preregistered matched transfer trial.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "trial_id",
+    "pair_id",
+    "proposal_id",
+    "arm",
+    "case_id",
+    "case_input_sha256",
+    "task_signature_sha256",
+    "harness_id",
+    "base_harness_version",
+    "base_harness_fingerprint_sha256",
+    "effective_harness_fingerprint_sha256",
+    "environment_fingerprint_sha256",
+    "agent_fingerprint_sha256",
+    "model_fingerprint_sha256",
+    "started_at",
+    "finished_at",
+    "target_opportunity_present",
+    "opportunity_evidence_ref",
+    "target_action_observed",
+    "trace_completeness",
+    "adaptation_digest",
+    "adaptation_loaded",
+    "task_outcome",
+    "contract_outcome",
+    "constraint_violations",
+    "intervention_observability",
+    "intervention_count",
+    "cost_observations",
+    "evidence_refs"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "adaptation/0.1"
+    },
+    "trial_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pair_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "proposal_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "arm": {
+      "enum": [
+        "baseline",
+        "adapted"
+      ]
+    },
+    "case_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "case_input_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "task_signature_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "harness_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "base_harness_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "base_harness_fingerprint_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "effective_harness_fingerprint_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "environment_fingerprint_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "agent_fingerprint_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "model_fingerprint_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "target_opportunity_present": {
+      "type": "boolean"
+    },
+    "opportunity_evidence_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_action_observed": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "trace_completeness": {
+      "enum": [
+        "complete",
+        "partial",
+        "unknown"
+      ]
+    },
+    "adaptation_digest": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "adaptation_loaded": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "task_outcome": {
+      "enum": [
+        "success",
+        "failure",
+        "partial",
+        "unknown"
+      ]
+    },
+    "contract_outcome": {
+      "enum": [
+        "passed",
+        "failed",
+        "unknown"
+      ]
+    },
+    "constraint_violations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "intervention_observability": {
+      "enum": [
+        "complete",
+        "partial",
+        "unknown"
+      ]
+    },
+    "intervention_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "cost_observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "metric",
+          "value",
+          "unit",
+          "measurement_kind"
+        ],
+        "properties": {
+          "metric": {
+            "type": "string",
+            "minLength": 1
+          },
+          "value": {
+            "type": "number",
+            "minimum": 0
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1
+          },
+          "measurement_kind": {
+            "enum": [
+              "observed",
+              "provider_reported",
+              "estimated"
+            ]
+          }
+        }
+      }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "arm": {
+            "const": "baseline"
+          }
+        },
+        "required": [
+          "arm"
+        ]
+      },
+      "then": {
+        "properties": {
+          "adaptation_digest": {
+            "type": "null"
+          },
+          "adaptation_loaded": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "arm": {
+            "const": "adapted"
+          }
+        },
+        "required": [
+          "arm"
+        ]
+      },
+      "then": {
+        "properties": {
+          "adaptation_digest": {
+            "$ref": "#/$defs/sha256"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "trace_completeness": {
+            "const": "complete"
+          }
+        },
+        "required": [
+          "trace_completeness"
+        ]
+      },
+      "then": {
+        "properties": {
+          "target_action_observed": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  ]
+}
