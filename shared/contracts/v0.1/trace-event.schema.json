@@ -56,6 +56,7 @@
     "source_binding": {
       "type": "object",
       "additionalProperties": false,
+      "required": ["repository_id", "base_revision", "target_revision", "tree_sha256"],
       "properties": {
         "repository_id": {"type": ["string", "null"]},
         "base_revision": {"type": ["string", "null"]},
@@ -87,7 +88,17 @@
     },
     "event_payload": {
       "type": "object",
-      "description": "Event-specific structured fields. Never include raw credentials, bearer tokens or unredacted private values."
+      "additionalProperties": false,
+      "required": ["payload_schema_id", "payload_schema_version", "payload_schema_sha256", "data"],
+      "properties": {
+        "payload_schema_id": {"type": "string", "minLength": 1},
+        "payload_schema_version": {"type": "string", "minLength": 1},
+        "payload_schema_sha256": {"$ref": "#/$defs/sha256"},
+        "data": {
+          "type": "object",
+          "description": "Payload validated against the exact external schema identified above. Never include raw credentials, bearer tokens or unredacted private values."
+        }
+      }
     },
     "previous_event_digest": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
     "event_digest": {"$ref": "#/$defs/sha256"}
