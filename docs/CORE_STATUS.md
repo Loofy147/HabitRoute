@@ -1,7 +1,9 @@
 # HabitRoute Core — Implementation Status
 
 **Status date:** 2026-11-06  
-**Observed source baseline:** `43d714c8760a15026e0acb966919f483d893e7d0`  
+**Observed runtime-code baseline:** `43d714c8760a15026e0acb966919f483d893e7d0`  
+**Integration-documentation base:** `e81d8f1ec07d53023e77063c1d1964f976549a66`  
+**Current feature branch head:** `2cf92b5ad21116f7b7c42c17fda724a644d0cdc5` (PR #4 draft)  
 **Package:** `habitroute` 0.1.0.dev0 (experimental; not a stable production runtime)
 
 ## Canonical machine-habit core
@@ -40,6 +42,17 @@
 - Routes ambiguous adapter outcomes to `NEEDS_ATTENTION`.
 - Tests use a `StubHarness`; no production provider adapter was found.
 
+## Hand-designed reference habit — design complete, runtime open
+
+PR #4 adds the first manually authored habit, `repo-change-verification/v1`:
+
+- `habits/repo-change-verification/v1/HABIT_SPEC.md`: intent, invariants, constraints, decision points, inspection/validation matrix, complete safe-skip fingerprint, retry/failure rules, evidence contract, intervention classification and later-held success definition.
+- `habits/repo-change-verification/v1/flow.json` and `flow.schema.json`: explicit ordered flow and transition schema.
+- `shared/contracts/v0.1/`: structured trace-event, decision-record, later decision-outcome and strict flow-verdict schemas.
+- `tests/test_hand_designed_contracts.py`: schema validity, graph closure, separation of decision/outcome records, mining boundary and negative tests against false `SUCCESS_HELD` claims.
+
+**Status:** the hand design and schema-level tests are present on the PR branch. The runtime does not yet emit or enforce these contracts. The habit is not ACTIVE and its traces are not a mining dataset. A local pass is `VERIFIED_AT_END`; only independent later revalidation on the exact same source digest can produce `SUCCESS_HELD`.
+
 ## Important execution boundary
 
 The worker exists; older status text and issue bodies that say it is missing are stale. However, the ordinary operation-node path and multi-operation habit path have different checkpoint granularity.
@@ -49,11 +62,11 @@ For a multi-operation habit, the worker calls the sequence executor and commits 
 ## Verification
 
 - GitHub Actions workflow: `.github/workflows/tests.yml`.
-- Latest observed run: [41841168040](https://github.com/Loofy147/HabitRoute/actions/runs/41841168040).
-- Commit: `43d714c8760a15026e0acb966919f483d893e7d0`.
-- Conclusion: success on Python 3.11, 3.12 and 3.13.
-- Exact latest test count was not captured.
-- Historical 77/77 count applies to commit `090fc7c3fddbc95c7b128045fa7a20ab3dd63400`, not the latest commit.
+- Runtime-code baseline main run: [41841168040](https://github.com/Loofy147/HabitRoute/actions/runs/41841168040) succeeded on Python 3.11, 3.12 and 3.13.
+- Hand-designed contract PR run: [42231017168](https://github.com/Loofy147/HabitRoute/actions/runs/42231017168) succeeded on the PR merge ref for Python 3.11, 3.12 and 3.13.
+- Each PR matrix job reported **97 tests passed**. The new CI step installs `jsonschema>=4.23,<5` for schema/contract tests; HabitRoute's runtime dependency list remains empty.
+- PR #4 is still a draft against `docs/unified-runtime-foundation`; it is not merged into main.
+- Historical 77/77 count applies to commit `090fc7c3fddbc95c7b128045fa7a20ab3dd63400`, not the current tested branch.
 - Legacy simulator tests remain under `experiments/step_savings_v1/`.
 
 ## Not implemented or not proven
@@ -75,9 +88,10 @@ For a multi-operation habit, the worker calls the sequence executor and commits 
 
 ## Immediate engineering priorities
 
-1. Add operation-level intent/result/checkpoint records for multi-operation habits.
-2. Define idempotency/reconciliation semantics and inject crashes around provider side effects.
-3. Replace caller-supplied aggregates as the sole efficiency evidence with raw paired trial records and independent verification.
-4. Propagate a typed cost vector from operation through habit and flow.
-5. Add a concrete read-only harness adapter and prove actual policy enforcement.
-6. Add durable exact-version habit storage and staged discovery/promotion only after evidence controls are in place.
+1. Review and merge the architecture preparation and hand-design PRs in dependency order; keep the habit in design-only state until runtime gates exist.
+2. Implement structured append-only trace events and a separate immutable decision/outcome ledger; add semantic validation and replay/integrity tests.
+3. Add operation-level durable intent/result/checkpoint records for multi-operation habits.
+4. Define idempotency/reconciliation semantics and inject crashes around provider side effects.
+5. Enforce complete budget, evidence, constraint, intervention and later-revalidation gates in a verdict evaluator.
+6. Replace caller-supplied aggregate profiles as the sole efficiency evidence with raw paired trial records and independent verification.
+7. Add a concrete read-only harness adapter and prove actual policy enforcement; only then stage discovery/promotion.

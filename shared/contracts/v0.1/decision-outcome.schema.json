@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://habitroute.dev/contracts/v0.1/decision-outcome.schema.json",
+  "title": "HabitRoute Decision Outcome Event",
+  "description": "Append-only later observation about an earlier decision. It never overwrites the reasoning or evidence snapshot in the original decision record.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "outcome_event_id", "decision_id", "flow_id", "run_id", "observed_at", "outcome_status", "outcome_summary", "evidence_refs", "causal_assessment", "reversal"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "outcome_event_id": {"type": "string", "minLength": 1},
+    "decision_id": {"type": "string", "minLength": 1},
+    "flow_id": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "outcome_status": {"enum": ["held", "partially_held", "reversed", "invalidated", "inconclusive", "not_observed"]},
+    "outcome_summary": {"type": "string", "minLength": 1},
+    "evidence_refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "causal_assessment": {"enum": ["decision_related", "execution_related", "environmental_change", "external_event", "unknown"]},
+    "reversal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["performed", "reversible", "cost"],
+      "properties": {
+        "performed": {"type": "boolean"},
+        "reversible": {"type": "boolean"},
+        "cost": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "unit", "basis"],
+          "properties": {
+            "value": {"type": "number", "minimum": 0},
+            "unit": {"type": "string", "minLength": 1},
+            "basis": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "follow_up_decision_id": {"type": ["string", "null"]}
+  }
+}

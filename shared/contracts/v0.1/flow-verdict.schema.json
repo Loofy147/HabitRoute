@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://habitroute.dev/contracts/v0.1/flow-verdict.schema.json",
+  "title": "HabitRoute Flow Verdict",
+  "description": "Terminal or provisional verdict evaluated against the immutable habit success contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "flow_id", "flow_version", "run_id", "habit_id", "habit_version", "constraint_policy", "target_digest", "status", "issued_at", "budget_audit", "constraint_audit", "evidence_audit", "intervention_audit", "source_stability_audit", "immediate_gates_passed", "success", "mining_eligible", "revalidation"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "flow_id": {"type": "string", "minLength": 1},
+    "flow_version": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "habit_id": {"type": "string", "minLength": 1},
+    "habit_version": {"type": "string", "minLength": 1},
+    "constraint_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_id", "version", "sha256"],
+      "properties": {
+        "policy_id": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "target_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "status": {"enum": ["SUCCESS_HELD", "VERIFIED_AT_END", "FAILED", "BLOCKED", "NEEDS_ATTENTION", "ASSISTED", "INCOMPLETE", "INVALIDATED", "PROVISIONAL_BUDGET_UNOBSERVABLE"]},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "budget_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["within_limits", "dimensions"],
+      "properties": {
+        "within_limits": {"type": "boolean"},
+        "dimensions": {
+          "type": "array",
+          "minItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["metric", "limit", "observed", "unit", "measurement_kind", "within_limit"],
+            "properties": {
+              "metric": {"enum": ["tokens", "elapsed_time_ms", "tool_calls", "retries", "cpu_time_ms", "memory_bytes", "external_cost"]},
+              "limit": {"type": "number", "minimum": 0},
+              "observed": {"type": ["number", "null"], "minimum": 0},
+              "unit": {"type": "string", "minLength": 1},
+              "measurement_kind": {"enum": ["observed", "provider_reported", "estimated", "unknown"]},
+              "within_limit": {"type": "boolean"}
+            },
+            "allOf": [
+              {
+                "if": {"properties": {"measurement_kind": {"const": "unknown"}}, "required": ["measurement_kind"]},
+                "then": {"properties": {"observed": {"type": "null"}, "within_limit": {"const": false}}}
+              }
+            ]
+          },
+          "allOf": [
+            {"contains": {"properties": {"metric": {"const": "tokens"}}, "required": ["metric"]}},
+            {"contains": {"properties": {"metric": {"const": "elapsed_time_ms"}}, "required": ["metric"]}},
+            {"contains": {"properties": {"metric": {"const": "tool_calls"}}, "required": ["metric"]}},
+            {"contains": {"properties": {"metric": {"const": "retries"}}, "required": ["metric"]}}
+          ]
+        }
+      }
+    },
+    "constraint_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["all_constraints_held", "violations", "audit_evidence_refs"],
+      "properties": {
+        "all_constraints_held": {"type": "boolean"},
+        "violations": {"type": "array", "items": {"type": "string"}},
+        "audit_evidence_refs": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "evidence_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete", "all_digests_valid", "independent_verification_passed", "required_artifacts", "missing_artifacts", "evidence_refs"],
+      "properties": {
+        "complete": {"type": "boolean"},
+        "all_digests_valid": {"type": "boolean"},
+        "independent_verification_passed": {"type": "boolean"},
+        "required_artifacts": {"type": "integer", "minimum": 0},
+        "missing_artifacts": {"type": "array", "items": {"type": "string"}},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "intervention_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observability", "human_interventions", "unrecorded_interventions", "autonomous"],
+      "properties": {
+        "observability": {"enum": ["complete", "partial", "unknown"]},
+        "human_interventions": {"type": "array", "items": {"type": "string"}},
+        "unrecorded_interventions": {"type": "array", "items": {"type": "string"}},
+        "autonomous": {"type": "boolean"}
+      }
+    },
+    "source_stability_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unchanged_during_run", "initial_digest", "terminal_digest", "digest_equality_verified"],
+      "properties": {
+        "unchanged_during_run": {"type": "boolean"},
+        "initial_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "terminal_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "digest_equality_verified": {"type": "boolean"}
+      }
+    },
+    "immediate_gates_passed": {"type": "boolean"},
+    "success": {"type": "boolean"},
+    "mining_eligible": {"type": "boolean"},
+    "revalidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "status"],
+      "properties": {
+        "required": {"type": "boolean"},
+        "status": {"enum": ["pending", "passed", "failed", "unavailable", "not_applicable"]},
+        "verifier_id": {"type": ["string", "null"]},
+        "verifier_version": {"type": ["string", "null"]},
+        "same_target_digest_confirmed": {"type": ["boolean", "null"]},
+        "evidence_ref": {"type": ["string", "null"]},
+        "observed_at": {"type": ["string", "null"], "format": "date-time"}
+      }
+    },
+    "reason_codes": {"type": "array", "items": {"type": "string"}}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "SUCCESS_HELD"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "success": {"const": true},
+          "mining_eligible": {"const": true},
+          "immediate_gates_passed": {"const": true},
+          "budget_audit": { "properties": { "within_limits": {"const": true}, "dimensions": { "items": { "properties": { "measurement_kind": {"enum": ["observed", "provider_reported"]}, "within_limit": {"const": true} }, "required": ["measurement_kind", "within_limit"] } } } },
+          "constraint_audit": {"properties": {"all_constraints_held": {"const": true}, "violations": {"maxItems": 0}, "audit_evidence_refs": {"minItems": 1}}},
+          "evidence_audit": {
+            "properties": {
+              "complete": {"const": true},
+              "all_digests_valid": {"const": true},
+              "independent_verification_passed": {"const": true},
+              "required_artifacts": {"minimum": 1},
+              "missing_artifacts": {"maxItems": 0},
+              "evidence_refs": {"minItems": 1}
+            }
+          },
+          "intervention_audit": {
+            "properties": {
+              "observability": {"const": "complete"},
+              "unrecorded_interventions": {"maxItems": 0},
+              "autonomous": {"const": true}
+            }
+          },
+          "source_stability_audit": {"properties": {"unchanged_during_run": {"const": true}, "digest_equality_verified": {"const": true}}},
+          "revalidation": {
+            "required": ["verifier_id", "verifier_version", "same_target_digest_confirmed", "evidence_ref", "observed_at"],
+            "properties": {
+              "required": {"const": true},
+              "status": {"const": "passed"},
+              "same_target_digest_confirmed": {"const": true},
+              "evidence_ref": {"type": "string", "minLength": 1},
+              "observed_at": {"type": "string", "format": "date-time"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"enum": ["VERIFIED_AT_END", "FAILED", "BLOCKED", "NEEDS_ATTENTION", "ASSISTED", "INCOMPLETE", "INVALIDATED", "PROVISIONAL_BUDGET_UNOBSERVABLE"]}}, "required": ["status"]},
+      "then": {"properties": {"success": {"const": false}, "mining_eligible": {"const": false}}}
+    }
+  ]
+}

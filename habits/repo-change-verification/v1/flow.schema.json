@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://habitroute.dev/contracts/habits/repo-change-verification/v1/flow.schema.json",
+  "title": "Repo Change Verification Flow Definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schema_version", "habit_id", "habit_version", "status", "mode", "intent", "policy_requirements", "nodes", "terminal_states", "global_constraints"],
+  "properties": {
+    "$schema": {"const": "https://habitroute.dev/contracts/habits/repo-change-verification/v1/flow.schema.json"},
+    "schema_version": {"const": "1.0.0"},
+    "habit_id": {"const": "repo-change-verification"},
+    "habit_version": {"const": "1.0.0"},
+    "status": {"const": "hand_designed_not_runtime_enforced"},
+    "mode": {"const": "read_only"},
+    "intent": {"type": "string", "minLength": 1},
+    "policy_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["constraint_policy", "read_only_capability_profile", "budget_contract", "evidence_store", "intervention_observability"],
+      "properties": {
+        "constraint_policy": {"const": "required_immutable_id_version_digest"},
+        "read_only_capability_profile": {"const": "required"},
+        "budget_contract": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required_dimensions", "measurement_required", "unknown_measurement_outcome"],
+          "properties": {
+            "required_dimensions": {
+              "type": "array",
+              "minItems": 4,
+              "uniqueItems": true,
+              "items": {"enum": ["tokens", "elapsed_time_ms", "tool_calls", "retries"]},
+              "allOf": [
+                {"contains": {"const": "tokens"}},
+                {"contains": {"const": "elapsed_time_ms"}},
+                {"contains": {"const": "tool_calls"}},
+                {"contains": {"const": "retries"}}
+              ]
+            },
+            "measurement_required": {"const": true},
+            "unknown_measurement_outcome": {"const": "provisional_budget_unobservable"}
+          }
+        },
+        "evidence_store": {"const": "append_only_access_controlled"},
+        "intervention_observability": {"const": "required_for_autonomous_success"}
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "purpose"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["preflight", "observation", "inspection", "decision", "validation", "independent_verification", "wait_and_revalidate"]},
+          "purpose": {"type": "string", "minLength": 1},
+          "required_inputs": {"type": "array", "items": {"type": "string"}},
+          "required_observations": {"type": "array", "items": {"type": "string"}},
+          "required_outputs": {"type": "array", "items": {"type": "string"}},
+          "decisions": {"type": "array", "items": {"type": "string"}},
+          "on_pass": {"type": "string", "minLength": 1},
+          "on_all_pass": {"type": "string", "minLength": 1},
+          "on_all_skipped_or_some_execute": {"type": "string", "minLength": 1},
+          "on_unknown_or_fail": {"type": "string", "minLength": 1},
+          "on_deterministic_failure": {"type": "string", "minLength": 1},
+          "on_transient_safe_failure_with_budget": {"type": "string", "minLength": 1},
+          "on_unknown_or_unsafe_failure": {"type": "string", "minLength": 1},
+          "on_fail_or_unknown": {"type": "string", "minLength": 1},
+          "on_drift_or_unrecorded_intervention": {"type": "string", "minLength": 1},
+          "on_unknown_intervention_or_budget": {"type": "string", "minLength": 1},
+          "on_failure": {"type": "string", "minLength": 1},
+          "on_missing_or_different_digest": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "terminal_states": {
+      "type": "object",
+      "minProperties": 2,
+      "propertyNames": {
+        "enum": ["SUCCESS_HELD", "VERIFIED_AT_END", "FAILED", "BLOCKED", "NEEDS_ATTENTION", "ASSISTED", "INCOMPLETE", "INVALIDATED", "PROVISIONAL_BUDGET_UNOBSERVABLE"]
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["success", "mining_eligible"],
+        "properties": {
+          "success": {"type": "boolean"},
+          "mining_eligible": {"type": "boolean"},
+          "provisional": {"type": "boolean"},
+          "reason": {"type": "string"},
+          "required": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "global_constraints": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+  },
+  "$defs": {
+    "nodeIdsMustBeUnique": {
+      "description": "A semantic validator must ensure nodes[].id is unique and all nonterminal transitions reference an existing node or declared terminal state."
+    }
+  }
+}
