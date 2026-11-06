@@ -155,5 +155,17 @@ class AdaptationContractTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             Draft202012Validator(schema('evaluation.schema.json')).validate(value)
 
+    def test_net_benefit_requires_quality_constraint_and_overhead_gates(self):
+        value = valid_evaluation()
+        value['constraint_gate']['passed'] = False
+        with self.assertRaises(ValidationError):
+            Draft202012Validator(schema('evaluation.schema.json')).validate(value)
+
+    def test_non_benefit_verdict_cannot_recommend_human_review(self):
+        value = valid_evaluation()
+        value['verdict'] = 'NO_EFFECT'
+        with self.assertRaises(ValidationError):
+            Draft202012Validator(schema('evaluation.schema.json')).validate(value)
+
 if __name__ == '__main__':
     unittest.main()

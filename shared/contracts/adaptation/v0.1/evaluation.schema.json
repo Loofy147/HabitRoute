@@ -492,6 +492,90 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "verdict": {
+            "const": "NET_BENEFIT"
+          }
+        },
+        "required": [
+          "verdict"
+        ]
+      },
+      "then": {
+        "properties": {
+          "primary_effect": {
+            "properties": {
+              "directional_evidence": {
+                "const": true
+              },
+              "risk_difference": {
+                "exclusiveMaximum": 0
+              },
+              "interval_high": {
+                "exclusiveMaximum": 0
+              }
+            }
+          },
+          "quality_gate": {
+            "properties": {
+              "passed": {
+                "const": true
+              }
+            }
+          },
+          "constraint_gate": {
+            "properties": {
+              "passed": {
+                "const": true
+              },
+              "adapted_violation_count": {
+                "const": 0
+              },
+              "unobserved_intervention_pairs": {
+                "const": 0
+              }
+            }
+          },
+          "unrelated_work": {
+            "properties": {
+              "material_overhead_observed": {
+                "const": false
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "verdict": {
+            "const": "NET_BENEFIT"
+          }
+        },
+        "required": [
+          "verdict"
+        ]
+      },
+      "then": {
+        "properties": {
+          "promotion_recommendation": {
+            "const": "human_review"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "promotion_recommendation": {
+            "not": {
+              "const": "human_review"
+            }
+          }
+        }
+      }
     }
   ]
 }
