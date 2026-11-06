@@ -5,9 +5,10 @@
   "description": "One immutable event in a version-pinned flow execution trace. This is an observation record, not a narrative transcript.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "event_id", "flow_id", "flow_version", "run_id", "habit_id", "habit_version", "constraint_policy", "sequence", "occurred_at", "event_type", "step_id", "actor", "source", "source_binding", "evidence_refs", "cost_observations", "intervention", "event_payload", "previous_event_digest", "event_digest"],
+  "required": ["schema_version", "canonicalization", "event_id", "flow_id", "flow_version", "run_id", "habit_id", "habit_version", "constraint_policy", "sequence", "occurred_at", "event_type", "step_id", "actor", "source", "source_binding", "evidence_refs", "cost_observations", "intervention", "event_payload", "previous_event_digest", "event_digest"],
   "properties": {
     "schema_version": {"const": "0.1"},
+    "canonicalization": {"const": "habitroute-json-v1"},
     "event_id": {"type": "string", "minLength": 1, "maxLength": 128},
     "flow_id": {"type": "string", "minLength": 1},
     "flow_version": {"type": "string", "minLength": 1},
