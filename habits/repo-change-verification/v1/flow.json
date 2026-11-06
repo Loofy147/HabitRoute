@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "https://habitroute.dev/contracts/habits/repo-change-verification/v1/flow.schema.json",
   "schema_version": "1.0.0",
   "habit_id": "repo-change-verification",
   "habit_version": "1.0.0",
@@ -98,7 +98,7 @@
       "purpose": "Recompute the relevant source and inventory fingerprints; compare them with the captured target and inspect intervention records.",
       "required_outputs": ["terminal_source_fingerprint", "intervention_audit", "constraint_audit", "budget_audit"],
       "decisions": ["DEC-NO-RESCUE-AND-CONSTRAINTS-HELD", "DEC-BUDGET-WITHIN-LIMIT"],
-      "on_pass": "VERIFIED_AT_END",
+      "on_pass": "later_revalidation",
       "on_drift_or_unrecorded_intervention": "INVALIDATED",
       "on_unknown_intervention_or_budget": "PROVISIONAL_BUDGET_UNOBSERVABLE"
     },
