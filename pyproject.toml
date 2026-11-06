@@ -5,9 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "habitroute"
 version = "0.1.0.dev0"
-description = "Research prototype for evidence-backed adaptive skills and route memory"
+description = "Research-to-engineering system for reusable, evidence-gated machine-operation patterns and persistent flows"
 readme = "src/habitroute/README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
 dependencies = []
 
 [tool.setuptools]

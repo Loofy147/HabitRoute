@@ -6,13 +6,13 @@ New evidence may supersede a decision, but the reason and affected experiments m
 
 **Status: accepted**
 
-Keep the executable synthetic research harness under experiments/step_savings_v1/. Do not rewrite its behavior while building the machine-habit core.
+Keep the executable synthetic research harness under `experiments/step_savings_v1/`. Do not rewrite its behavior while building the machine-habit core.
 
 ## D-002 — Preserve usage utility as the legacy default
 
 **Status: accepted**
 
-The existing experiment keeps policy="utility" as its default. Step-savings remains opt-in because gains are not uniform across capacity and repeated-change conditions.
+The existing experiment keeps `policy="utility"` as its default. Step-savings remains opt-in because gains are not uniform across capacity and repeated-change conditions.
 
 ## D-003 — Machine habits are execution optimizations, not skills
 
@@ -50,6 +50,24 @@ A durable journal cannot by itself guarantee exactly-once effects in an external
 
 The prior `contracts.py` / `execution.py` files and their tests are preserved as a research prototype. They are not the definition of a HabitRoute machine habit. New development uses machine-operation and persistent-flow abstractions.
 
+## D-009 — HabitRoute is the host repository for CPM integration
+
+**Status: accepted; preparation branch**
+
+Evolve the existing `Loofy147/HabitRoute` repository into the modular monorepo. Do not create a new repository as the first integration step. Preserve current HabitRoute package behavior and import CPM as a separate, independently installable distribution. See [UNIFIED_RUNTIME_DECISION.md](UNIFIED_RUNTIME_DECISION.md).
+
+## D-010 — Keep CPM and HabitRoute responsibilities and stores independent
+
+**Status: accepted; canonical integration constraint**
+
+CPM owns context selection, progressive disclosure, budgeting, retrieval and context cache. HabitRoute owns machine habits, harness policy and persistent flows. The runtime coordinates them through versioned contracts. No circular imports; no shared mutable memory store.
+
+## D-011 — MIT license for HabitRoute repository
+
+**Status: accepted; preparation branch**
+
+Select MIT for the repository, effective in this preparation branch. The package metadata and root `LICENSE` must agree. Imported components and dependencies still require provenance and compatibility review; a repository-level license does not override third-party terms.
+
 ## Open questions
 
 - Which trace normalization and similarity features best identify reusable machine-operation patterns?
@@ -60,3 +78,4 @@ The prior `contracts.py` / `execution.py` files and their tests are preserved as
 - How should habits be invalidated when an API, schema, tool, credential scope, dependency or environment changes?
 - Which costs should be hard constraints and which can be traded off?
 - Should HabitRoute own the durable flow runtime or integrate with Temporal, Step Functions, Camunda or another provider through adapters?
+- What exact task/context/habit evidence relationship is sufficient to establish that a context selection contributed to a successful execution?

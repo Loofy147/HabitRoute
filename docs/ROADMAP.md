@@ -1,70 +1,95 @@
 # Roadmap
 
-## P0 — Preserve existing evidence
+This roadmap separates the existing HabitRoute core from the broader Unified Agent Runtime integration. Checkboxes reflect the inspected 2026-11-06 snapshot; future completion requires evidence.
+
+## P0 — Preserve and reproduce existing research
 
 - [x] Preserve the synthetic step-savings experiment and reports.
-- [x] Preserve legacy utility and savings policies.
-- [ ] Add the complete raw per-seed artifact and reproducibility manifest.
+- [x] Preserve legacy usage-utility and step-savings policies.
+- [ ] Add complete raw per-seed artifacts and a reproducibility manifest.
 - [ ] Verify the experiment from a clean clone.
 
-## P1 — Establish the machine-habit model
+## P1 — Machine-habit model
 
 - [x] Correct the product definition: machine execution optimization, not human habits or RL skills.
 - [x] Separate Machine Habit, Execution Harness and Persistent Flow.
-- [x] Define scope, triggers, operation patterns, postconditions, idempotency, baseline comparison and promotion gates.
-- [x] Implement a dependency-free MachineHabit model and harness authorization.
-- [x] Implement an adapter-driven machine-habit executor with state-bound input resolution, idempotency-key reuse, postcondition checks and uncertain-outcome handoff.
-- [x] Implement an efficiency evaluator using matched baseline/candidate cohorts and reliability lower bounds.
-- [x] Add tests for wrong harness/scope, failed trigger/preconditions, approval, side-effect semantics, inadequate evidence and no efficiency gain.
+- [x] Define scope, triggers, operation patterns, postconditions, idempotency and baseline comparison.
+- [x] Implement the dependency-free MachineHabit model and harness authorization.
+- [x] Implement the adapter-driven machine-habit executor.
+- [x] Implement aggregate efficiency evaluation using cohort labels and Wilson reliability lower bounds.
+- [x] Add tests for scope, trigger, preconditions, approvals, side-effect semantics and efficiency-gate behavior.
 
-**Gate:** no habit can become active without passing the declared correctness and efficiency gates in its harness scope.
+**Gate:** no habit may be activated unless its declared correctness and efficiency gates pass. Independent raw paired-trial evidence remains future work.
 
-## P2 — Persistent flow foundation
+## P2 — Persistent flow and worker foundation
 
-- [x] Define immutable flow definitions and version-pinned run instances; habit nodes pin an exact habit version.
-- [x] Add append-only JSONL events and deterministic replay; snapshot compaction remains open.
-- [x] Add sequence-checked local single-writer journal interface with fsync.
+- [x] Define immutable flow definitions and version-pinned run instances.
+- [x] Add append-only JSONL events, deterministic replay and sequence validation.
+- [x] Add local single-writer journal with fsync.
 - [x] Add pause/resume, wait release, branch, bounded retry, cancellation and needs-attention states.
-- [x] Define per-operation idempotency/deduplication/compensation/non-repeatable semantics and stable attempt keys.
-- [x] Test event replay rebuilds identical control state; external side-effect deduplication remains the adapter's responsibility.
+- [x] Define operation-effect classes and stable idempotency keys.
+- [x] Implement a worker that dispatches operation nodes and exact-version habit nodes through a HarnessAdapter.
+- [x] Add worker tests for success, retry-key reuse, approval pause/resume, unknown outcomes, postcondition failure and exact-version habit lookup.
+- [ ] Commit a durable event/checkpoint after each operation inside a multi-operation habit.
+- [ ] Add fault injection after external side effects but before event acknowledgement.
 
-**Gate:** kill/restart fault-injection tests recover from the last committed journal event; external side-effect deduplication is not yet implemented.
+**Gate:** ordinary flow state replays from committed events; per-operation durability for multi-step habits remains an open critical gate.
 
-## P3 — Harness architecture
+## P3 — Harness enforcement and recovery
 
-- [x] Define a provider-neutral HarnessAdapter protocol and typed operation outcomes.
-- [ ] Add environment/capability fingerprinting, allowlists, approval gates and budgets.
-- [ ] Add input/output validation, independent postcondition checks and structured tracing.
-- [ ] Add operation adapters for scripts, APIs, repositories, files and agent runtimes.
-- [ ] Add deterministic test harness, fault injection and paired baseline/candidate runs.
+- [x] Define provider-neutral HarnessAdapter protocol and typed operation outcomes.
+- [x] Add contract-level allowlist, approval and attempt checks.
+- [ ] Add actual provider-backed credential boundaries, egress controls, hard budgets, timeouts, cancellation and output limits.
+- [ ] Add independent environment/capability fingerprinting.
+- [ ] Add durable idempotency/deduplication or provider reconciliation.
+- [ ] Implement and test compensation before enabling compensatable operations.
+- [ ] Add deterministic test harness and crash-window fault injection.
+- [ ] Add at least one concrete read-only external adapter.
 
-**Gate:** the same habit/flow contract works with at least two distinct harness adapters without core changes.
+**Gate:** a harness control is only marked enforced after deny-path tests prove the provider boundary rejects prohibited actions.
 
-## P4 — Discover and improve machine habits
+## P4 — Evidence-backed habit discovery and promotion
 
-- [ ] Ingest operation traces with provenance.
+- [ ] Ingest operation traces with immutable provenance.
 - [ ] Normalize repeated operations and parameter bindings.
-- [ ] Discover duplicated calls, repeated computations and reusable subflows.
-- [ ] Propose narrow candidate patterns with explicit trigger/preconditions.
-- [ ] Run matched baseline/candidate comparison on correctness and cost.
-- [ ] Add staged promotion, monitoring, quarantine and fallback.
+- [ ] Discover repeated subflows, redundant calls and reusable patterns.
+- [ ] Propose narrow candidates with explicit triggers/preconditions.
+- [ ] Store raw paired baseline/candidate trial records and exact input/case digests.
+- [ ] Independently verify outputs and side effects.
+- [ ] Add shadow evaluation, staged promotion, monitoring, drift detection and quarantine.
+- [ ] Make a durable exact-version HabitRegistry.
 
-**Gate:** show reproducible savings without violating output contracts or increasing unreported total cost.
+**Gate:** mutation-tested promotion cannot pass on empty, incomplete, mismatched or unverified evidence.
 
-## P5 — Revisit the synthetic route experiments
+## P5 — Expand machine-operation economics research
 
-- [ ] Map route-memory concepts to machine operation traces only where applicable.
-- [ ] Retest step-savings, dominated pruning and audit under machine operation cost vectors.
-- [ ] Test repeated changes to APIs, tool schemas, harness versions and credentials/capabilities.
-- [ ] Compare lookup/harness overhead against the savings from habit reuse.
+- [ ] Keep the legacy route simulator unchanged as its own baseline.
+- [ ] Add machine-operation experiments for calls, latency, resource usage, retries and recovery overhead.
+- [ ] Test regime/schema/provider/harness changes and revalidation.
+- [ ] Compare retrieval, context assembly and verification overhead against savings.
+- [ ] Include paired uncertainty and pre-registered analysis.
 
-## P6 — Integrate or release
+## P6 — Unified Agent Runtime integration
 
-- [ ] Evaluate owned persistence versus adapters to established durable workflow engines.
-- [ ] Add type checking, linting, CI, docs and two example harness adapters.
-- [ ] Choose a license before inviting reuse.
-- [ ] Publish only after crash/restart, duplicate-delivery and end-to-end verification gates pass.
+- [ ] Import CPM v0.5.0 under `packages/contextpm/`, preserving `contextpm` and `cheg`.
+- [ ] Keep CPM and HabitRoute independently installable and free of circular imports.
+- [ ] Freeze shared contracts under `shared/contracts/`.
+- [ ] Add runtime composition under `runtime/unified_agent_runtime/`.
+- [ ] Start with read-only context-to-habit planning and explainable dry-run output.
+- [ ] Pin package/source versions and context manifest digests per run.
+- [ ] Add component-absence tests proving each package works alone.
+- [ ] Benchmark context-only, habit-only and combined factorial conditions.
+
+**Gate:** no side-effecting combined execution until P2/P3 critical durability and recovery tests pass.
+
+## P7 — Release readiness
+
+- [ ] SBOM, dependency/license scan and provenance record.
+- [ ] Security review and permission-denial tests for every adapter.
+- [ ] Crash/restart, duplicate delivery, reconciliation and rollback evidence.
+- [ ] CI matrix and integration tests for supported Python versions.
+- [ ] Deployment-specific operational review; do not label the entire project production-ready without scope-specific evidence.
 
 ## Immediate next task
 
-Implement the machine-habit record and harness authorization/efficiency gate first. Then implement the event-sourced persistent flow core. Do not extend the RL-style option prototype as the canonical habit model.
+Begin with per-operation checkpoints and crash/recovery semantics in HabitRoute. In parallel, import CPM unchanged into the monorepo only after its source manifest and notices are reviewed. Do not build an autonomous side-effecting runtime before the durability gate passes.
