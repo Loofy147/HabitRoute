@@ -10,7 +10,7 @@ import json
 import unittest
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, ValidationError
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -121,7 +121,12 @@ def trace_event():
             {"metric": "tool_calls", "value": 1, "unit": "calls", "measurement_kind": "observed", "measurement_source": "runtime-counter"}
         ],
         "intervention": {"occurred": False, "kind": None},
-        "event_payload": {"objective": "verify changed source"},
+        "event_payload": {
+            "payload_schema_id": "habitroute://repo-change-verification/v1/payloads/flow-started",
+            "payload_schema_version": "0.1",
+            "payload_schema_sha256": DIGEST,
+            "data": {"objective": "verify changed source"},
+        },
         "previous_event_digest": None,
         "event_digest": DIGEST,
     }
@@ -211,7 +216,7 @@ class HandDesignedContractTests(unittest.TestCase):
     def test_flow_requires_all_four_budget_dimensions(self):
         candidate = copy.deepcopy(self.flow)
         candidate["policy_requirements"]["budget_contract"]["required_dimensions"].remove("retries")
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValidationError):
             Draft202012Validator(self.flow_schema).validate(candidate)
 
     def test_mining_is_not_an_execution_side_effect(self):
@@ -228,15 +233,19 @@ class HandDesignedContractTests(unittest.TestCase):
         validator.validate(trace_event())
         invalid = trace_event()
         invalid["intervention"] = {"occurred": False, "kind": "RESCUE"}
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValidationError):
             validator.validate(invalid)
+        unversioned_payload = trace_event()
+        unversioned_payload["event_payload"] = {"data": {"objective": "verify changed source"}}
+        with self.assertRaises(ValidationError):
+            validator.validate(unversioned_payload)
 
     def test_decision_and_later_outcome_are_separate_records(self):
         Draft202012Validator(self.schemas["decision-record"]).validate(decision_record())
         Draft202012Validator(self.schemas["decision-outcome"]).validate(decision_outcome())
         contaminated = decision_record()
         contaminated["later_outcome"] = {"status": "held"}
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValidationError):
             Draft202012Validator(self.schemas["decision-record"]).validate(contaminated)
 
     def test_held_success_requires_every_gate(self):
@@ -249,6 +258,7 @@ class HandDesignedContractTests(unittest.TestCase):
             "missing_retry_budget": lambda value: value["budget_audit"]["dimensions"].pop(),
             "constraint_violation": lambda value: value["constraint_audit"]["violations"].append("write operation attempted"),
             "missing_evidence": lambda value: value["evidence_audit"]["missing_artifacts"].append("test-log"),
+            "empty_evidence_set": lambda value: value["evidence_audit"].update(required_artifacts=0, evidence_refs=[]),
             "unobserved_intervention": lambda value: value["intervention_audit"].update(observability="unknown", unrecorded_interventions=["manual edit"], autonomous=False),
             "digest_equality_unverified": lambda value: value["source_stability_audit"].update(terminal_digest="b" * 64, digest_equality_verified=False),
             "wrong_revalidation_target": lambda value: value["revalidation"].update(same_target_digest_confirmed=False),
@@ -258,7 +268,7 @@ class HandDesignedContractTests(unittest.TestCase):
             candidate = copy.deepcopy(held_verdict())
             mutate(candidate)
             with self.subTest(mutation=name):
-                with self.assertRaises(Exception):
+                with self.assertRaises(ValidationError):
                     validator.validate(candidate)
 
     def test_local_pass_is_not_mining_eligible(self):
@@ -272,7 +282,7 @@ class HandDesignedContractTests(unittest.TestCase):
         Draft202012Validator(self.schemas["flow-verdict"]).validate(candidate)
 
         candidate["mining_eligible"] = True
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValidationError):
             Draft202012Validator(self.schemas["flow-verdict"]).validate(candidate)
 
 
