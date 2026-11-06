@@ -15,3 +15,6 @@ htmlcov/
 .DS_Store
 results-*.json
 *.tmp
+
+# CPM generated runtime state
+.cpm-runtime-cache/
