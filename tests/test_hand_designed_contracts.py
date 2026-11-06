@@ -72,6 +72,7 @@ def held_verdict():
             "unchanged_during_run": True,
             "initial_digest": DIGEST,
             "terminal_digest": DIGEST,
+            "digest_equality_verified": True,
         },
         "immediate_gates_passed": True,
         "success": True,
@@ -206,6 +207,12 @@ class HandDesignedContractTests(unittest.TestCase):
             for field in transition_fields.intersection(node):
                 with self.subTest(node=node["id"], transition=field):
                     self.assertIn(node[field], known)
+
+    def test_flow_requires_all_four_budget_dimensions(self):
+        candidate = copy.deepcopy(self.flow)
+        candidate["policy_requirements"]["budget_contract"]["required_dimensions"].remove("retries")
+        with self.assertRaises(Exception):
+            Draft202012Validator(self.flow_schema).validate(candidate)
 
     def test_mining_is_not_an_execution_side_effect(self):
         self.assertEqual(self.flow["status"], "hand_designed_not_runtime_enforced")
