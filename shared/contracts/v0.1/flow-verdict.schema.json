@@ -100,11 +100,11 @@
     "source_stability_audit": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["unchanged_during_run", "initial_digest", "terminal_digest"],
+      "required": ["unchanged_during_run", "initial_digest", "terminal_digest", "digest_equality_verified"],
       "properties": {
         "unchanged_during_run": {"type": "boolean"},
         "initial_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "terminal_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        "terminal_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},\n        "digest_equality_verified": {"type": "boolean"}
       }
     },
     "immediate_gates_passed": {"type": "boolean"},
@@ -151,7 +151,7 @@
               "autonomous": {"const": true}
             }
           },
-          "source_stability_audit": {"properties": {"unchanged_during_run": {"const": true}}},
+          "source_stability_audit": {"properties": {"unchanged_during_run": {"const": true}, "digest_equality_verified": {"const": true}}},
           "revalidation": {
             "required": ["verifier_id", "verifier_version", "same_target_digest_confirmed", "evidence_ref", "observed_at"],
             "properties": {
