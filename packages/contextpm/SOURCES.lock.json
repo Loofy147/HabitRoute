@@ -1,0 +1,30 @@
+{
+  "schema_version": "1",
+  "distribution": "context-package-manager",
+  "version": "0.5.0",
+  "source_archive": "context-package-manager-v0.5.0.zip",
+  "source_archive_sha256": "9824b6ca364bac9f5634e9d05fa5731735fa937d74b23f8eb030af8e5aad83f0",
+  "source_archive_size_bytes": 161922,
+  "python_requires": ">=3.11",
+  "declared_license": "MIT",
+  "import_roots": ["contextpm", "cheg"],
+  "console_scripts": {
+    "cpm": "contextpm.cli:main",
+    "cheg": "cheg.cli:main"
+  },
+  "source_verification": {
+    "archive_hash_verified": true,
+    "test_command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m pytest -q -p no:cacheprovider",
+    "test_result": "183 passed",
+    "runtime_python": "3.13",
+    "elapsed_seconds": 18.12
+  },
+  "not_imported": true,
+  "excluded_generated_paths": [".cpm-runtime-cache/"],
+  "known_release_limitations": [
+    "fixture score is not semantic quality-parity evidence",
+    "context-footprint reduction is not provider-token savings",
+    "real Docker/Podman isolation was NOT_RUN",
+    "distributed cache locking and multi-process concurrency are out of scope"
+  ]
+}
