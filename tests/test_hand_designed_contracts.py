@@ -175,7 +175,7 @@ class HandDesignedContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.schemas = {
-            path.stem: read_json(path)
+            path.name.removesuffix(".schema.json"): read_json(path)
             for path in CONTRACTS.glob("*.schema.json")
         }
         cls.flow_schema = read_json(HABIT / "flow.schema.json")
@@ -243,7 +243,7 @@ class HandDesignedContractTests(unittest.TestCase):
             "constraint_violation": lambda value: value["constraint_audit"]["violations"].append("write operation attempted"),
             "missing_evidence": lambda value: value["evidence_audit"]["missing_artifacts"].append("test-log"),
             "unobserved_intervention": lambda value: value["intervention_audit"].update(observability="unknown", unrecorded_interventions=["manual edit"], autonomous=False),
-            "target_changed": lambda value: value["source_stability_audit"].update(terminal_digest="b" * 64),
+            "digest_equality_unverified": lambda value: value["source_stability_audit"].update(terminal_digest="b" * 64, digest_equality_verified=False),
             "wrong_revalidation_target": lambda value: value["revalidation"].update(same_target_digest_confirmed=False),
             "success_claim_without_held_state": lambda value: value.update(status="VERIFIED_AT_END", success=True),
         }
