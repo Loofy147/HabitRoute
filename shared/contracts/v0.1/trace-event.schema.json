@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://habitroute.dev/contracts/v0.1/trace-event.schema.json",
+  "title": "HabitRoute Trace Event",
+  "description": "One immutable event in a version-pinned flow execution trace. This is an observation record, not a narrative transcript.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "flow_id", "flow_version", "run_id", "habit_id", "habit_version", "constraint_policy", "sequence", "occurred_at", "event_type", "step_id", "actor", "source", "source_binding", "evidence_refs", "cost_observations", "intervention", "event_payload", "previous_event_digest", "event_digest"],
+  "properties": {
+    "schema_version": {"const": "0.1"},
+    "event_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "flow_id": {"type": "string", "minLength": 1},
+    "flow_version": {"type": "string", "minLength": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "habit_id": {"type": "string", "minLength": 1},
+    "habit_version": {"type": "string", "minLength": 1},
+    "constraint_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_id", "version", "sha256"],
+      "properties": {
+        "policy_id": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "sequence": {"type": "integer", "minimum": 1},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "event_type": {
+      "enum": ["flow_started", "preflight_observed", "inventory_captured", "path_inspected", "validation_plan_recorded", "decision_recorded", "skip_evaluated", "validation_started", "validation_completed", "retry_scheduled", "wait_started", "approval_requested", "intervention_recorded", "evidence_attached", "evidence_verified", "independent_check_completed", "terminal_verdict_recorded", "revalidation_completed", "invalidated", "checkpoint_committed", "recovery_started", "recovery_completed"]
+    },
+    "step_id": {"type": "string", "minLength": 1},
+    "branch_id": {"type": ["string", "null"]},
+    "decision_id": {"type": ["string", "null"]},
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {"enum": ["agent", "human", "system", "provider", "ci"]},
+        "id": {"type": "string", "minLength": 1},
+        "role": {"type": ["string", "null"]}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "version"],
+      "properties": {
+        "kind": {"enum": ["runtime", "tool", "harness", "provider", "ci", "operator", "test_runner", "verifier"]},
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "invocation_id": {"type": ["string", "null"]}
+      }
+    },
+    "source_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository_id": {"type": ["string", "null"]},
+        "base_revision": {"type": ["string", "null"]},
+        "target_revision": {"type": ["string", "null"]},
+        "tree_sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "inventory_sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "validation_fingerprint_sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "environment_fingerprint_sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]}
+      }
+    },
+    "evidence_refs": {"type": "array", "items": {"$ref": "#/$defs/evidenceRef"}},
+    "cost_observations": {"type": "array", "items": {"$ref": "#/$defs/costObservation"}},
+    "intervention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["occurred", "kind"],
+      "properties": {
+        "occurred": {"type": "boolean"},
+        "kind": {"enum": ["APPROVAL", "ASSISTANCE", "RESCUE", "UNOBSERVED", null]},
+        "actor_id": {"type": ["string", "null"]},
+        "reason": {"type": ["string", "null"]},
+        "before_sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "after_sha256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]}
+      }
+    },
+    "event_payload": {
+      "type": "object",
+      "description": "Event-specific structured fields. Never include raw credentials, bearer tokens or unredacted private values."
+    },
+    "previous_event_digest": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+    "event_digest": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_id", "artifact_role", "sha256", "media_type"],
+      "properties": {
+        "evidence_id": {"type": "string", "minLength": 1},
+        "artifact_role": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "media_type": {"type": "string", "minLength": 1},
+        "uri": {"type": ["string", "null"], "format": "uri-reference"},
+        "claim_ids": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+        "verifier_id": {"type": ["string", "null"]},
+        "verifier_version": {"type": ["string", "null"]}
+      }
+    },
+    "costObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "value", "unit", "measurement_kind", "measurement_source"],
+      "properties": {
+        "metric": {"enum": ["tokens", "elapsed_time_ms", "tool_calls", "retries", "cpu_time_ms", "memory_bytes", "external_cost", "cache_reads", "file_reads", "operation_calls", "recovery_cost"]},
+        "value": {"type": "number", "minimum": 0},
+        "unit": {"type": "string", "minLength": 1},
+        "measurement_kind": {"enum": ["observed", "provider_reported", "estimated", "derived"]},
+        "measurement_source": {"type": "string", "minLength": 1},
+        "source_evidence_id": {"type": ["string", "null"]}
+      }
+    }
+  }
+}
