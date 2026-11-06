@@ -134,8 +134,8 @@
           "success": {"const": true},
           "mining_eligible": {"const": true},
           "immediate_gates_passed": {"const": true},
-          "budget_audit": {"properties": {"within_limits": {"const": true}}},
-          "constraint_audit": {"properties": {"all_constraints_held": {"const": true}}},
+          "budget_audit": { "properties": { "within_limits": {"const": true}, "dimensions": { "items": { "properties": { "measurement_kind": {"enum": ["observed", "provider_reported"]}, "within_limit": {"const": true} }, "required": ["measurement_kind", "within_limit"] } } } },
+          "constraint_audit": {"properties": {"all_constraints_held": {"const": true}, "violations": {"maxItems": 0}}},
           "evidence_audit": {
             "properties": {
               "complete": {"const": true},
