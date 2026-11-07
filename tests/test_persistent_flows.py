@@ -81,7 +81,8 @@ class PersistentFlowTests(unittest.TestCase):
                     attempt=1,
                     input_sha256="a" * 64,
                 )
-            self.assertEqual(flow.snapshot.operation_index if hasattr(flow.snapshot, "operation_index") else 0, 0)
+            self.assertEqual(len(flow.snapshot.completed_operations), 0)
+            self.assertEqual(flow.snapshot.operation_attempt_count(0), 0)
             self.assertIsNone(flow.snapshot.pending_operation)
             self.assertEqual(len(flow.journal.load("run-sequential-001")), 1)
 
@@ -153,6 +154,59 @@ class PersistentFlowTests(unittest.TestCase):
                 handle.write(b"not-json\n")
             with self.assertRaisesRegex(ValueError, "corrupt flow journal"):
                 journal.load("run-corrupt-tail-001")
+
+    def test_operation_intent_requires_boolean_idempotency_contract(self):
+        flow_def = FlowDefinition(
+            "intent-bool", 1, "send",
+            (
+                FlowNode(
+                    "send", FlowNodeKind.OPERATION, "orders.submit", "done",
+                    effect=OperationEffect.DEDUPLICATED,
+                    idempotency_key_supported=True,
+                ),
+                FlowNode("done", FlowNodeKind.END),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            flow = PersistentFlow.start(flow_def, "run-intent-bool-001", JsonlFlowJournal(tmp))
+            with self.assertRaisesRegex(ValueError, "must be a boolean"):
+                flow.begin_operation(
+                    operation_index=0, operation_ref="orders.submit",
+                    effect=OperationEffect.DEDUPLICATED,
+                    idempotency_key="key-1", attempt=1,
+                    input_sha256="a" * 64,
+                    idempotency_key_supported="false",
+                )
+            self.assertIsNone(flow.snapshot.pending_operation)
+            self.assertEqual(len(flow.journal.load("run-intent-bool-001")), 1)
+
+    def test_reconciliation_rejects_truthy_non_boolean_applied_values(self):
+        flow_def = FlowDefinition(
+            "reconcile-bool", 1, "send",
+            (
+                FlowNode(
+                    "send", FlowNodeKind.OPERATION, "orders.submit", "done",
+                    effect=OperationEffect.NON_REPEATABLE,
+                ),
+                FlowNode("done", FlowNodeKind.END),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            flow = PersistentFlow.start(flow_def, "run-reconcile-bool-001", JsonlFlowJournal(tmp))
+            flow.begin_operation(
+                operation_index=0, operation_ref="orders.submit",
+                effect=OperationEffect.NON_REPEATABLE,
+                idempotency_key=flow.operation_scope_key, attempt=1,
+                input_sha256="b" * 64,
+            )
+            flow.mark_operation_outcome_unknown("lost-ack")
+            with self.assertRaisesRegex(ValueError, "applied must be a boolean"):
+                flow.reconcile_pending_operation(
+                    applied="false", evidence_ref="provider:lookup",
+                    reconciled_by="operator:verified",
+                )
+            self.assertEqual(flow.snapshot.status, FlowStatus.NEEDS_ATTENTION)
+            self.assertIsNotNone(flow.snapshot.pending_operation)
 
     def test_retry_preserves_idempotency_key_and_failure_branch(self):
         flow_def = definition()
