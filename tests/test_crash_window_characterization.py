@@ -64,6 +64,13 @@ class FailIntentJournal(JsonlFlowJournal):
         super().append(event)
 
 
+class FailOperationResultJournal(JsonlFlowJournal):
+    def append(self, event):
+        if event.kind is FlowEventKind.OPERATION_SUCCEEDED:
+            raise OSError("simulated result checkpoint failure after provider acknowledgement")
+        super().append(event)
+
+
 def make_profile() -> HarnessProfile:
     return HarnessProfile(
         "fault-injection-harness", "1", "ci-linux", "repository-x",
@@ -270,6 +277,40 @@ class DurableOperationCheckpointTests(unittest.TestCase):
                 [event.kind for event in JsonlFlowJournal(tmp).load("intent-fail-001")],
                 [FlowEventKind.STARTED],
             )
+
+    def test_result_checkpoint_failure_keeps_nonrepeatable_intent_for_reconciliation(self):
+        profile = make_profile()
+        harness = CrashHarness(profile, "no-crash")
+        node = FlowNode(
+            "publish", FlowNodeKind.OPERATION, "deploy.publish", "done",
+            effect=OperationEffect.NON_REPEATABLE,
+        )
+        definition = FlowDefinition(
+            "result-write-failure", 1, "publish",
+            (node, FlowNode("done", FlowNodeKind.END)),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = FailOperationResultJournal(tmp)
+            flow = PersistentFlow.start(definition, "result-fail-001", journal)
+            with self.assertRaisesRegex(OSError, "result checkpoint failure"):
+                FlowWorker(harness).dispatch(flow)
+            self.assertEqual(harness.external_effects["deploy.publish"], 1)
+            self.assertIsNotNone(flow.snapshot.pending_operation)
+            restored = PersistentFlow.restore(
+                definition, "result-fail-001", JsonlFlowJournal(tmp)
+            )
+            blocked = FlowWorker(harness).dispatch(restored)
+            self.assertEqual(blocked.status, DispatchStatus.NEEDS_ATTENTION)
+            self.assertEqual(harness.external_effects["deploy.publish"], 1)
+            restored.reconcile_pending_operation(
+                applied=True,
+                evidence_ref="provider:release-789",
+                reconciled_by="operator:verified",
+                outputs={"release.published": "true"},
+            )
+            finished = FlowWorker(harness).dispatch(restored)
+            self.assertEqual(finished.status, DispatchStatus.TERMINAL)
+            self.assertEqual(harness.external_effects["deploy.publish"], 1)
 
     def test_reconciliation_that_confirms_not_applied_does_not_auto_retry(self):
         profile = make_profile()
