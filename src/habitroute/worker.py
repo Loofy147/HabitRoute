@@ -263,7 +263,12 @@ class FlowWorker:
                 },
             )
             return self._result_after_transition(flow, node_id, "postconditions_not_satisfied")
-        flow.succeed_step(metadata=self._checkpoint_cost_metadata((checkpoint,)))
+        flow.succeed_step(metadata={
+            "operation_ref": checkpoint.operation_ref,
+            "idempotency_key": checkpoint.idempotency_key,
+            "attempt": str(checkpoint.attempt),
+            **self._checkpoint_cost_metadata((checkpoint,)),
+        })
         return self._result_after_transition(flow, node_id, "operation_succeeded")
 
     def _dispatch_habit(self, flow: PersistentFlow) -> FlowDispatchResult:
