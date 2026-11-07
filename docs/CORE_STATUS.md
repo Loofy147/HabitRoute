@@ -6,7 +6,7 @@
 **PR #4 hand-design branch head:** `8facb898fa7734978dd6b9e0bd2ee934688c7d9e` (draft)  
 **Retrospective adaptation protocol:** PR #6 draft at `98df6c0b461441afa5e8be395db5c25e43e45896` (based on PR #4).
 **Research extension:** PR #7 draft at `cb02fea3b681779b8b545762914cb82b765ff3af` (based on PR #6).
-**Durability implementation:** PR #8 draft, branch `feat/durable-operation-checkpoints-v1`, based on PR #7.  
+**Durability implementation:** PR [#8](https://github.com/Loofy147/HabitRoute/pull/8), draft head `455c31f20ed198b70cd4696b983d562558dfc39d`, based on PR #7.  
 **Package:** `habitroute` 0.1.0.dev0 (experimental; not a stable production runtime)
 
 ## Canonical machine-habit core
@@ -34,6 +34,7 @@
 - Local append-only JSONL journal with sequence validation, complete-write loops, file fsync and POSIX parent-directory fsync on initial run-file creation.
 - Per-operation intent, success, failure, unknown-outcome and reconciliation events; replay reconstructs pending intents, attempt counters and completed operation checkpoints.
 - Per-node-visit operation scopes remain stable across retries but change when a flow loops back to the same node.
+- The reducer rejects operation-index gaps and refuses to cancel a flow while an external operation intent remains unresolved, preserving the reconciliation path.
 - Recovery by replaying the journal into the flow reducer.
 - Single-writer-per-run contract remains.
 
@@ -79,9 +80,9 @@ The branch `research/adaptation-evaluation-and-durability-v1` adds:
 
 - `docs/RESEARCH_SYNTHESIS_AND_EXPERIMENT_PROGRAM.md`: evidence-linked research synthesis covering retrospective harness adaptation, contrastive trajectory diagnosis, event-log granularity, causal/paired evaluation, durable execution, runtime enforcement, modular evolution, CPM factorial testing, canarying and drift.
 - `experiments/adaptation_eval_v1/`: dependency-free paired-trial analysis probe. It validates pair identity, opportunity/action observability, trace completeness, adaptation digest consistency and explicit loading/fingerprint consistency. It retains assigned treatment trials in the intention-to-treat denominator, keeps cost metrics in separate units, and reports missingness instead of converting it to zero.
-- `tests/test_crash_window_characterization.py`: deterministic fault-injection characterization against the current `FlowWorker`. It simulates abrupt process termination after an external provider effect but before a journal acknowledgement, then restores from the JSONL journal.
+- `tests/test_crash_window_characterization.py`: initially characterized the duplicate-effect crash window; PR #8 replaces those defect-demonstration expectations with durable-recovery tests against the updated `FlowWorker`.
 
-**Observed implication:** the characterization tests are expected to reproduce duplicate external effects for a non-repeatable ordinary operation and a multi-operation habit after replay. The journal records only the initial flow start before the replay, while the restored flow remains at the same node. These tests document an existing failure mode; they do not fix it and must not be counted as a successful reliability result.
+**Status transition:** PR #7 reproduced the prior duplicate-effect behavior. PR #8 adds per-operation journal intent/result checkpoints and recovery tests. Do not describe the old defect-demonstration tests as the current expected result on the PR #8 branch.
 
 The paired evaluator is a research helper, not a statistical promotion gate. It does not calculate sample-size power or quality non-inferiority confidence intervals, validate real provider telemetry, establish raw trace provenance, or issue an activation verdict. Fixtures are synthetic and are not an eligible mining dataset.
 
@@ -100,9 +101,11 @@ The prior worker-level checkpoint gap is addressed in the PR #8 draft:
 - Applied reconciliation records an evidence reference and resumes from the checkpoint. Not-applied reconciliation leaves the flow in NEEDS_ATTENTION and does not retry automatically.
 - Operation keys include node-visit scope: retries of one visit reuse a key; later flow-loop visits receive a new key.
 
-Fault-injection tests cover failure before intent append, process termination after provider effect but before acknowledgement, result-checkpoint write failure, provider-side deduplicated retry, multi-operation completed-prefix recovery and both reconciliation outcomes.
+Fault-injection tests cover failure before intent append, process termination after provider effect but before acknowledgement, result-checkpoint write failure, provider-side deduplicated retry, multi-operation completed-prefix recovery, both reconciliation outcomes, unresolved-operation cancellation refusal and sequential operation-index enforcement.
 
 **Boundary:** these are local journal and simulated-adapter guarantees. No production adapter exists. The local journal cannot atomically commit with an arbitrary provider, and the core reconciliation method does not authenticate the supplied `reconciled_by` identity or validate provider evidence. HR-02 remains critical.
+
+Final PR #8 CI run [42317958263](https://github.com/Loofy147/HabitRoute/actions/runs/42317958263) passed 10 legacy experiment tests, 115 core/contract tests and 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (138 tests per version). This run corresponds to PR #8 head `455c31f20ed198b70cd4696b983d562558dfc39d`.
 
 See [OPERATION_CHECKPOINTS_AND_RECOVERY.md](OPERATION_CHECKPOINTS_AND_RECOVERY.md) for the protocol, recovery matrix, test evidence and limits.
 
@@ -113,7 +116,8 @@ See [OPERATION_CHECKPOINTS_AND_RECOVERY.md](OPERATION_CHECKPOINTS_AND_RECOVERY.m
 - PR #4 earlier contract run [42231017168](https://github.com/Loofy147/HabitRoute/actions/runs/42231017168) passed 97 tests per Python matrix before the latest canonicalization requirement was added to the trace schema; the dependent fixture correction is included in PR #6.
 - PR #6 run [42313250815](https://github.com/Loofy147/HabitRoute/actions/runs/42313250815) passed **104 tests on each of Python 3.11, 3.12 and 3.13**.
 - CI installs `jsonschema>=4.23,<5` for schema/contract tests; HabitRoute's runtime dependency list remains empty.
-- PR #7 run [42315937577](https://github.com/Loofy147/HabitRoute/actions/runs/42315937577) passed 10 legacy experiment tests + 108 core/contract tests + 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (131 per version). The CodeRabbit review check was skipped because the PR is draft.
+- PR #7 run [42315937577](https://github.com/Loofy147/HabitRoute/actions/runs/42315937577) passed 10 legacy experiment tests + 108 core/contract tests + 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (131 per version).
+- PR #8 run [42317958263](https://github.com/Loofy147/HabitRoute/actions/runs/42317958263) passed 10 legacy experiment tests + 115 core/contract tests + 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (138 per version).
 - PR #4 remains a draft against `docs/unified-runtime-foundation`; PR #6 remains a draft against the PR #4 branch; PR #7 remains a draft against PR #6's branch. None is merged into main.
 - Historical 77/77 count applies to commit `090fc7c3fddbc95c7b128045fa7a20ab3dd63400`, not the current tested branch.
 - Legacy simulator tests remain under `experiments/step_savings_v1/`.
