@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from enum import Enum
+from fractions import Fraction
 from math import comb, isfinite
 from typing import Iterable
 
@@ -92,6 +93,10 @@ class Trial:
             if self.adaptation_digest is None:
                 raise ValueError("adapted trials require the assigned adaptation digest")
             _validate_digest("adaptation_digest", self.adaptation_digest)
+            if self.adaptation_loaded is False and self.effective_harness_sha256 != self.base_harness_sha256:
+                raise ValueError("an explicitly unloaded adaptation cannot change the effective harness fingerprint")
+            if self.adaptation_loaded is True and self.effective_harness_sha256 == self.base_harness_sha256:
+                raise ValueError("a loaded adaptation must be represented in the effective harness fingerprint")
 
         if self.opportunity_present is False and self.target_action_observed is True:
             raise ValueError("target action cannot be observed when its opportunity was absent")
@@ -103,6 +108,7 @@ class CostSummary:
     unit: str
     measurement_kind: str
     paired_samples: int
+    missing_pairs: int
     baseline_mean: float
     adapted_mean: float
     adapted_minus_baseline: float
@@ -134,6 +140,7 @@ class EvaluationSummary:
     adapted_pairs_with_constraint_violations: int
     adapted_constraint_violation_count: int
     unrelated_work_observed: int
+    unrelated_work_unknown: int
     unrelated_work_total: int
     cost_summaries: tuple[CostSummary, ...]
     minimum_opportunity_pairs: int
@@ -148,7 +155,7 @@ def exact_mcnemar_two_sided_p(baseline_only: int, adapted_only: int) -> float:
     if discordant == 0:
         return 1.0
     tail = sum(comb(discordant, k) for k in range(min(baseline_only, adapted_only) + 1))
-    return min(1.0, 2.0 * tail / (2 ** discordant))
+    return min(1.0, float(Fraction(2 * tail, 2 ** discordant)))
 
 
 def _mean(values: list[float]) -> float:
@@ -157,6 +164,7 @@ def _mean(values: list[float]) -> float:
 
 def evaluate_pairs(
     trials: Iterable[Trial], *, minimum_opportunity_pairs: int,
+    expected_adaptation_digest: str | None = None,
 ) -> EvaluationSummary:
     """Summarize matched trials without making a promotion or safety decision.
 
@@ -167,6 +175,8 @@ def evaluate_pairs(
     """
     if minimum_opportunity_pairs < 0:
         raise ValueError("minimum_opportunity_pairs cannot be negative")
+    if expected_adaptation_digest is not None:
+        _validate_digest("expected_adaptation_digest", expected_adaptation_digest)
 
     grouped: dict[str, dict[Arm, Trial]] = defaultdict(dict)
     all_trials = tuple(trials)
@@ -175,6 +185,12 @@ def evaluate_pairs(
         if trial.arm in arm_map:
             raise ValueError(f"duplicate {trial.arm.value} trial for pair {trial.pair_id}")
         arm_map[trial.arm] = trial
+
+    adapted_digests = {trial.adaptation_digest for trial in all_trials if trial.arm is Arm.ADAPTED}
+    if len(adapted_digests) > 1:
+        raise ValueError("one evaluation cannot mix different adaptation digests")
+    if expected_adaptation_digest is not None and adapted_digests and adapted_digests != {expected_adaptation_digest}:
+        raise ValueError("adaptation digest does not match the preregistered evaluation target")
 
     exclusions: Counter[str] = Counter()
     eligible: list[tuple[Trial, Trial]] = []
@@ -273,18 +289,19 @@ def evaluate_pairs(
             (item.metric, item.unit, item.measurement_kind): item.value
             for item in adapted.costs
         }
-        for key in base_costs.keys() & adapted_costs.keys():
-            base_value, adapted_value = base_costs[key], adapted_costs[key]
+        for key in base_costs.keys() | adapted_costs.keys():
+            base_value, adapted_value = base_costs.get(key), adapted_costs.get(key)
+            base_list, adapted_list = cost_values.setdefault(key, ([], []))
             if base_value is None or adapted_value is None:
                 continue
-            base_list, adapted_list = cost_values.setdefault(key, ([], []))
             base_list.append(base_value)
             adapted_list.append(adapted_value)
 
     cost_summaries = tuple(
         CostSummary(
             metric=key[0], unit=key[1], measurement_kind=key[2],
-            paired_samples=len(values[0]), baseline_mean=_mean(values[0]),
+            paired_samples=len(values[0]), missing_pairs=n - len(values[0]),
+            baseline_mean=_mean(values[0]),
             adapted_mean=_mean(values[1]),
             adapted_minus_baseline=_mean(values[1]) - _mean(values[0]),
         )
@@ -317,6 +334,7 @@ def evaluate_pairs(
         adapted_pairs_with_constraint_violations=len(violation_pair_ids),
         adapted_constraint_violation_count=violation_total,
         unrelated_work_observed=len(unrelated_known),
+        unrelated_work_unknown=len(adapted_trials) - len(unrelated_known),
         unrelated_work_total=sum(unrelated_known),
         cost_summaries=cost_summaries,
         minimum_opportunity_pairs=minimum_opportunity_pairs,
