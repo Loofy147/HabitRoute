@@ -59,7 +59,7 @@ Provider operations are recorded as individual intent/result pairs. The intent i
 
 Recovery behavior depends on the operation contract. READ_ONLY and IDEMPOTENT effects may be reissued. DEDUPLICATED effects may be reissued only if the actual adapter/provider durably enforces the supplied key. Pending NON_REPEATABLE or COMPENSATABLE effects stop for reconciliation. Node-visit-scoped keys prevent a later loop visit being confused with an earlier visit.
 
-Recovery rejects a pending intent if the active harness/environment/context identity differs from the one that created it. The journal truncates an unterminated final record while preserving earlier committed records, and refuses to repair newline-terminated corruption. This local journal cannot atomically commit with arbitrary remote providers. It does not establish exactly-once external effects, distributed multi-writer safety, or production-grade corrupted-tail recovery. See [OPERATION_CHECKPOINTS_AND_RECOVERY.md](OPERATION_CHECKPOINTS_AND_RECOVERY.md).
+Recovery rejects a pending intent if the active harness/environment/context identity differs from the one that created it. The journal truncates an unterminated final record while preserving earlier committed records, and refuses to repair newline-terminated corruption. This local journal cannot atomically commit with arbitrary remote providers. It does not establish exactly-once external effects, distributed multi-writer safety, or power-loss safety across all target filesystems. The loader truncates only an unterminated final append tail; newline-terminated corrupt records remain errors. The declared harness version is not yet an independently measured adapter build digest. See [OPERATION_CHECKPOINTS_AND_RECOVERY.md](OPERATION_CHECKPOINTS_AND_RECOVERY.md).
 
 ### Evidence and provenance
 
@@ -83,6 +83,7 @@ Candidate generation is not activation. An active habit must satisfy its context
 - Later loop visits to the same flow node receive a new operation scope.
 - Never promise exactly-once effects from a local durable journal alone.
 - Store external observations, time, random outcomes and model/tool responses needed for deterministic replay.
+- Pin pending operation recovery to a stable harness ID/version and environment/context; provider adapters must change their declared version when behavior or implementation changes.
 - If safe continuation cannot be established, move the run to `NEEDS_ATTENTION` rather than guessing or retrying indefinitely.
 
 ## Core invariants
