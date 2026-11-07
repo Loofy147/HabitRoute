@@ -54,6 +54,11 @@ class FlowEventKind(str, Enum):
     RESUMED = "resumed"
     CANCELLED = "cancelled"
     NEEDS_ATTENTION = "needs_attention"
+    OPERATION_INTENT = "operation_intent"
+    OPERATION_SUCCEEDED = "operation_succeeded"
+    OPERATION_FAILED = "operation_failed"
+    OPERATION_OUTCOME_UNKNOWN = "operation_outcome_unknown"
+    OPERATION_RECONCILED = "operation_reconciled"
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,6 +199,61 @@ class FlowEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class OperationIntent:
+    operation_index: int
+    operation_ref: str
+    effect: OperationEffect
+    idempotency_key: str
+    attempt: int
+    input_sha256: str
+    idempotency_key_supported: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "effect", OperationEffect(self.effect))
+        if self.operation_index < 0 or self.attempt < 1:
+            raise ValueError("operation index must be non-negative and attempt positive")
+        if not self.operation_ref.strip() or not self.idempotency_key.strip():
+            raise ValueError("operation reference and idempotency key must be non-empty")
+        if len(self.input_sha256) != 64 or any(
+            char not in "0123456789abcdef" for char in self.input_sha256.lower()
+        ):
+            raise ValueError("input_sha256 must be a SHA-256 hex digest")
+        if self.effect is OperationEffect.DEDUPLICATED and not self.idempotency_key_supported:
+            raise ValueError("deduplicated operations require idempotency-key support")
+
+
+@dataclass(frozen=True, slots=True)
+class OperationCheckpoint:
+    operation_index: int
+    operation_ref: str
+    effect: OperationEffect
+    idempotency_key: str
+    attempt: int
+    input_sha256: str
+    duration_ms: float | None
+    resource_units: float | None
+    external_cost: float | None
+    outputs: tuple[tuple[str, str], ...] = ()
+    evidence_ref: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "effect", OperationEffect(self.effect))
+        object.__setattr__(self, "outputs", tuple(sorted(self.outputs)))
+        if self.operation_index < 0 or self.attempt < 1:
+            raise ValueError("checkpoint operation index must be non-negative and attempt positive")
+        if not self.operation_ref.strip() or not self.idempotency_key.strip():
+            raise ValueError("checkpoint operation reference and key must be non-empty")
+        if len(self.input_sha256) != 64 or any(
+            char not in "0123456789abcdef" for char in self.input_sha256.lower()
+        ):
+            raise ValueError("checkpoint input_sha256 must be a SHA-256 hex digest")
+        for name in ("duration_ms", "resource_units", "external_cost"):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, (int, float)) or value < 0):
+                raise ValueError(f"{name} must be non-negative or None")
+
+
+@dataclass(frozen=True, slots=True)
 class FlowSnapshot:
     run_id: str
     flow_id: str
@@ -206,6 +266,9 @@ class FlowSnapshot:
     last_event_sequence: int = 0
     applied_event_ids: tuple[str, ...] = ()
     resume_status: FlowStatus | None = None
+    pending_operation: OperationIntent | None = None
+    completed_operations: tuple[OperationCheckpoint, ...] = ()
+    operation_attempts: tuple[tuple[int, int], ...] = ()
 
     @classmethod
     def initial(
@@ -226,6 +289,15 @@ class FlowSnapshot:
 
     def attempt_count(self, node_id: str) -> int:
         return dict(self.attempts).get(node_id, 0)
+
+    def operation_attempt_count(self, operation_index: int) -> int:
+        return dict(self.operation_attempts).get(operation_index, 0)
+
+    def completed_operation(self, operation_index: int) -> OperationCheckpoint | None:
+        for checkpoint in self.completed_operations:
+            if checkpoint.operation_index == operation_index:
+                return checkpoint
+        return None
 
     def idempotency_key(self) -> str:
         """Stable key for this logical run/node across retries and replay."""
@@ -298,10 +370,76 @@ def _settle_at_node(
     definition: FlowDefinition, snapshot: FlowSnapshot, node_id: str,
 ) -> FlowSnapshot:
     node = definition.node(node_id)
+    reset_operation_state = node_id != snapshot.current_node
+    operation_state = (
+        {
+            "pending_operation": None,
+            "completed_operations": (),
+            "operation_attempts": (),
+        }
+        if reset_operation_state else {}
+    )
     if node.kind is FlowNodeKind.END:
-        return replace(snapshot, current_node=node_id, status=node.end_status)
+        return replace(snapshot, current_node=node_id, status=node.end_status, **operation_state)
     status = FlowStatus.WAITING if node.kind is FlowNodeKind.WAIT else FlowStatus.RUNNING
-    return replace(snapshot, current_node=node_id, status=status)
+    return replace(snapshot, current_node=node_id, status=status, **operation_state)
+
+
+def _pending_operation_from_payload(payload: Mapping[str, str]) -> OperationIntent:
+    try:
+        return OperationIntent(
+            operation_index=int(payload["$op.index"]),
+            operation_ref=payload["$op.operation_ref"],
+            effect=OperationEffect(payload["$op.effect"]),
+            idempotency_key=payload["$op.idempotency_key"],
+            attempt=int(payload["$op.attempt"]),
+            input_sha256=payload["$op.input_sha256"],
+            idempotency_key_supported=payload.get("$op.idempotency_key_supported") == "true",
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("operation intent payload is invalid") from exc
+
+
+def _require_pending_match(
+    snapshot: FlowSnapshot, event: FlowEvent, payload: Mapping[str, str],
+) -> OperationIntent:
+    pending = snapshot.pending_operation
+    if pending is None or event.node_id != snapshot.current_node:
+        raise ValueError("operation result has no matching pending intent")
+    try:
+        index = int(payload["$op.index"])
+        key = payload["$op.idempotency_key"]
+    except (KeyError, ValueError) as exc:
+        raise ValueError("operation result identity is missing") from exc
+    if index != pending.operation_index or key != pending.idempotency_key:
+        raise ValueError("operation result does not match the pending intent")
+    return pending
+
+
+def _checkpoint_from_event(
+    pending: OperationIntent, payload: Mapping[str, str], *, evidence_ref: str | None = None,
+) -> OperationCheckpoint:
+    def optional_float(name: str) -> float | None:
+        value = payload.get(f"$meta.{name}")
+        return None if value is None else float(value)
+
+    outputs = tuple(sorted(
+        (key, value) for key, value in payload.items()
+        if not key.startswith("$meta.") and not key.startswith("$op.")
+    ))
+    return OperationCheckpoint(
+        operation_index=pending.operation_index,
+        operation_ref=pending.operation_ref,
+        effect=pending.effect,
+        idempotency_key=pending.idempotency_key,
+        attempt=pending.attempt,
+        input_sha256=pending.input_sha256,
+        duration_ms=optional_float("duration_ms"),
+        resource_units=optional_float("resource_units"),
+        external_cost=optional_float("external_cost"),
+        outputs=outputs,
+        evidence_ref=evidence_ref,
+    )
 
 
 def apply_flow_event(
@@ -321,7 +459,78 @@ def apply_flow_event(
     payload = dict(event.payload)
     updated = snapshot
 
-    if event.kind is FlowEventKind.STARTED:
+    if event.kind is FlowEventKind.OPERATION_INTENT:
+        if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
+            raise ValueError("operation intent does not match a running flow node")
+        node = definition.node(snapshot.current_node)
+        if node.kind not in (FlowNodeKind.OPERATION, FlowNodeKind.HABIT):
+            raise ValueError("operation intent requires an operation or habit node")
+        if snapshot.pending_operation is not None:
+            raise ValueError("another operation intent is already pending")
+        intent = _pending_operation_from_payload(payload)
+        if snapshot.completed_operation(intent.operation_index) is not None:
+            raise ValueError("operation index is already checkpointed")
+        if intent.attempt != snapshot.operation_attempt_count(intent.operation_index) + 1:
+            raise ValueError("operation attempt is not the next expected attempt")
+        if node.kind is FlowNodeKind.OPERATION and (
+            intent.operation_index != 0
+            or intent.operation_ref != node.target_ref
+            or intent.effect is not node.effect
+            or intent.idempotency_key_supported != node.idempotency_key_supported
+        ):
+            raise ValueError("operation intent differs from the pinned flow node")
+        attempts = dict(snapshot.operation_attempts)
+        attempts[intent.operation_index] = intent.attempt
+        updated = replace(
+            snapshot, pending_operation=intent,
+            operation_attempts=tuple(sorted(attempts.items())),
+        )
+    elif event.kind is FlowEventKind.OPERATION_SUCCEEDED:
+        if snapshot.status is not FlowStatus.RUNNING:
+            raise ValueError("operation success requires a running flow")
+        pending = _require_pending_match(snapshot, event, payload)
+        checkpoint = _checkpoint_from_event(pending, payload)
+        context = snapshot.context_dict()
+        context.update(dict(checkpoint.outputs))
+        updated = replace(
+            snapshot,
+            context=tuple(sorted(context.items())),
+            pending_operation=None,
+            completed_operations=snapshot.completed_operations + (checkpoint,),
+        )
+    elif event.kind is FlowEventKind.OPERATION_FAILED:
+        if snapshot.status is not FlowStatus.RUNNING:
+            raise ValueError("operation failure requires a running flow")
+        _require_pending_match(snapshot, event, payload)
+        updated = replace(snapshot, pending_operation=None)
+    elif event.kind is FlowEventKind.OPERATION_OUTCOME_UNKNOWN:
+        if snapshot.status is not FlowStatus.RUNNING:
+            raise ValueError("unknown operation outcome requires a running flow")
+        _require_pending_match(snapshot, event, payload)
+        updated = replace(snapshot, status=FlowStatus.NEEDS_ATTENTION)
+    elif event.kind is FlowEventKind.OPERATION_RECONCILED:
+        if snapshot.status is not FlowStatus.NEEDS_ATTENTION:
+            raise ValueError("operation reconciliation requires needs_attention state")
+        pending = _require_pending_match(snapshot, event, payload)
+        evidence_ref = payload.get("$meta.evidence_ref", "").strip()
+        reconciled_by = payload.get("$meta.reconciled_by", "").strip()
+        if not evidence_ref or not reconciled_by:
+            raise ValueError("operation reconciliation requires evidence_ref and reconciled_by")
+        resolution = payload.get("$meta.resolution")
+        if resolution == "applied":
+            checkpoint = _checkpoint_from_event(pending, payload, evidence_ref=evidence_ref)
+            context = snapshot.context_dict()
+            context.update(dict(checkpoint.outputs))
+            updated = replace(
+                snapshot, status=FlowStatus.RUNNING,
+                context=tuple(sorted(context.items())), pending_operation=None,
+                completed_operations=snapshot.completed_operations + (checkpoint,),
+            )
+        elif resolution == "not_applied":
+            updated = replace(snapshot, pending_operation=None)
+        else:
+            raise ValueError("operation reconciliation resolution must be applied or not_applied")
+    elif event.kind is FlowEventKind.STARTED:
         if snapshot.status is not FlowStatus.CREATED or event.node_id != definition.start_node:
             raise ValueError("invalid flow start event")
         updated = replace(snapshot, status=FlowStatus.RUNNING,
@@ -329,11 +538,14 @@ def apply_flow_event(
     elif event.kind is FlowEventKind.STEP_SUCCEEDED:
         if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
             raise ValueError("success event does not match current flow node")
+        if snapshot.pending_operation is not None:
+            raise ValueError("cannot finish a flow node with a pending operation")
         node = definition.node(snapshot.current_node)
         if node.kind not in (FlowNodeKind.OPERATION, FlowNodeKind.HABIT):
             raise ValueError("only operation/habit nodes can complete as a step")
         context = snapshot.context_dict()
-        context.update({key: value for key, value in payload.items() if not key.startswith("$meta.")})
+        context.update({key: value for key, value in payload.items()
+                        if not key.startswith("$meta.") and not key.startswith("$op.")})
         updated = replace(
             snapshot, context=tuple(sorted(context.items())),
             completed_nodes=snapshot.completed_nodes + (node.node_id,),
@@ -342,6 +554,8 @@ def apply_flow_event(
     elif event.kind is FlowEventKind.STEP_FAILED:
         if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
             raise ValueError("failure event does not match current flow node")
+        if snapshot.pending_operation is not None:
+            raise ValueError("cannot fail a flow node with a pending operation")
         node = definition.node(snapshot.current_node)
         if node.kind not in (FlowNodeKind.OPERATION, FlowNodeKind.HABIT):
             raise ValueError("only operation/habit nodes can fail as a step")
@@ -359,7 +573,8 @@ def apply_flow_event(
         if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
             raise ValueError("unknown outcome does not match current flow node")
         context = snapshot.context_dict()
-        context.update({key: value for key, value in payload.items() if not key.startswith("$meta.")})
+        context.update({key: value for key, value in payload.items()
+                        if not key.startswith("$meta.") and not key.startswith("$op.")})
         updated = replace(snapshot, status=FlowStatus.NEEDS_ATTENTION,
                           context=tuple(sorted(context.items())))
     elif event.kind is FlowEventKind.BRANCH_RESOLVED:
@@ -465,6 +680,86 @@ class PersistentFlow:
         self.journal.append(event)
         self.snapshot = candidate
         return candidate
+
+    def begin_operation(
+        self, *, operation_index: int, operation_ref: str, effect: OperationEffect,
+        idempotency_key: str, attempt: int, input_sha256: str,
+        idempotency_key_supported: bool = False,
+    ) -> FlowSnapshot:
+        payload = {
+            "$op.index": str(operation_index),
+            "$op.operation_ref": operation_ref,
+            "$op.effect": OperationEffect(effect).value,
+            "$op.idempotency_key": idempotency_key,
+            "$op.attempt": str(attempt),
+            "$op.input_sha256": input_sha256,
+            "$op.idempotency_key_supported": str(bool(idempotency_key_supported)).lower(),
+        }
+        return self._commit(FlowEventKind.OPERATION_INTENT, self.snapshot.current_node, payload)
+
+    def succeed_operation(
+        self, outputs: Mapping[str, str] | None = None, *,
+        duration_ms: float = 0.0, resource_units: float = 0.0, external_cost: float = 0.0,
+    ) -> FlowSnapshot:
+        pending = self.snapshot.pending_operation
+        if pending is None:
+            raise ValueError("no pending operation to complete")
+        payload = dict(outputs or {})
+        payload.update({
+            "$op.index": str(pending.operation_index),
+            "$op.idempotency_key": pending.idempotency_key,
+            "$meta.duration_ms": str(duration_ms),
+            "$meta.resource_units": str(resource_units),
+            "$meta.external_cost": str(external_cost),
+        })
+        return self._commit(FlowEventKind.OPERATION_SUCCEEDED, self.snapshot.current_node, payload)
+
+    def fail_operation(self, reason: str, metadata: Mapping[str, str] | None = None) -> FlowSnapshot:
+        pending = self.snapshot.pending_operation
+        if pending is None:
+            raise ValueError("no pending operation to fail")
+        payload = {
+            "$op.index": str(pending.operation_index),
+            "$op.idempotency_key": pending.idempotency_key,
+            "$meta.reason": reason,
+        }
+        payload.update({f"$meta.{key}": value for key, value in (metadata or {}).items()})
+        return self._commit(FlowEventKind.OPERATION_FAILED, self.snapshot.current_node, payload)
+
+    def mark_operation_outcome_unknown(
+        self, reason: str, metadata: Mapping[str, str] | None = None,
+    ) -> FlowSnapshot:
+        pending = self.snapshot.pending_operation
+        if pending is None:
+            raise ValueError("no pending operation to mark unknown")
+        payload = {
+            "$op.index": str(pending.operation_index),
+            "$op.idempotency_key": pending.idempotency_key,
+            "$meta.reason": reason,
+        }
+        payload.update({f"$meta.{key}": value for key, value in (metadata or {}).items()})
+        return self._commit(
+            FlowEventKind.OPERATION_OUTCOME_UNKNOWN, self.snapshot.current_node, payload
+        )
+
+    def reconcile_pending_operation(
+        self, *, applied: bool, evidence_ref: str, reconciled_by: str,
+        outputs: Mapping[str, str] | None = None,
+    ) -> FlowSnapshot:
+        pending = self.snapshot.pending_operation
+        if pending is None:
+            raise ValueError("no pending operation to reconcile")
+        if not evidence_ref.strip() or not reconciled_by.strip():
+            raise ValueError("reconciliation requires evidence_ref and reconciled_by")
+        payload = dict(outputs or {})
+        payload.update({
+            "$op.index": str(pending.operation_index),
+            "$op.idempotency_key": pending.idempotency_key,
+            "$meta.resolution": "applied" if applied else "not_applied",
+            "$meta.evidence_ref": evidence_ref,
+            "$meta.reconciled_by": reconciled_by,
+        })
+        return self._commit(FlowEventKind.OPERATION_RECONCILED, self.snapshot.current_node, payload)
 
     def succeed_step(
         self, outputs: Mapping[str, str] | None = None,
