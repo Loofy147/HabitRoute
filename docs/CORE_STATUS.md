@@ -92,7 +92,7 @@ For a multi-operation habit, the worker calls the sequence executor and commits 
 - PR #4 earlier contract run [42231017168](https://github.com/Loofy147/HabitRoute/actions/runs/42231017168) passed 97 tests per Python matrix before the latest canonicalization requirement was added to the trace schema; the dependent fixture correction is included in PR #6.
 - PR #6 run [42313250815](https://github.com/Loofy147/HabitRoute/actions/runs/42313250815) passed **104 tests on each of Python 3.11, 3.12 and 3.13**.
 - CI installs `jsonschema>=4.23,<5` for schema/contract tests; HabitRoute's runtime dependency list remains empty.
-- PR #7 run [42315856101](https://github.com/Loofy147/HabitRoute/actions/runs/42315856101) passed 10 legacy experiment tests + 108 core/contract tests + 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (131 per version). The CodeRabbit review check was skipped because the PR is draft.
+- PR #7 run [42315937577](https://github.com/Loofy147/HabitRoute/actions/runs/42315937577) passed 10 legacy experiment tests + 108 core/contract tests + 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (131 per version). The CodeRabbit review check was skipped because the PR is draft.
 - PR #4 remains a draft against `docs/unified-runtime-foundation`; PR #6 remains a draft against the PR #4 branch; PR #7 remains a draft against PR #6's branch. None is merged into main.
 - Historical 77/77 count applies to commit `090fc7c3fddbc95c7b128045fa7a20ab3dd63400`, not the current tested branch.
 - Legacy simulator tests remain under `experiments/step_savings_v1/`.
