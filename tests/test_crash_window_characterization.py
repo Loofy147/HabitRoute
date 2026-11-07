@@ -312,6 +312,49 @@ class DurableOperationCheckpointTests(unittest.TestCase):
             self.assertEqual(finished.status, DispatchStatus.TERMINAL)
             self.assertEqual(harness.external_effects["deploy.publish"], 1)
 
+
+    def test_unresolved_operation_cannot_be_cancelled_before_reconciliation(self):
+        profile = make_profile()
+        node = FlowNode(
+            "publish", FlowNodeKind.OPERATION, "deploy.publish", "done",
+            effect=OperationEffect.NON_REPEATABLE,
+        )
+        definition = FlowDefinition(
+            "pending-cancel-guard", 1, "publish",
+            (node, FlowNode("done", FlowNodeKind.END)),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = JsonlFlowJournal(tmp)
+            flow = PersistentFlow.start(definition, "pending-cancel-001", journal)
+            flow.begin_operation(
+                operation_index=0,
+                operation_ref="deploy.publish",
+                effect=OperationEffect.NON_REPEATABLE,
+                idempotency_key=flow.operation_scope_key,
+                attempt=1,
+                input_sha256="a" * 64,
+            )
+            last_sequence = flow.snapshot.last_event_sequence
+            with self.assertRaisesRegex(ValueError, "unresolved external operation"):
+                flow.cancel("operator requested cancellation")
+            self.assertEqual(flow.snapshot.status, FlowStatus.RUNNING)
+            self.assertTrue(flow.snapshot.pending_operation is not None)
+            self.assertEqual(flow.snapshot.last_event_sequence, last_sequence)
+
+            flow.mark_operation_outcome_unknown("worker_stopped_with_pending_operation")
+            flow.reconcile_pending_operation(
+                applied=False,
+                evidence_ref="provider:lookup-no-record",
+                reconciled_by="operator:verified",
+            )
+            self.assertEqual(flow.snapshot.status, FlowStatus.NEEDS_ATTENTION)
+            self.assertIsNone(flow.snapshot.pending_operation)
+            self.assertEqual(
+                [event.kind for event in journal.load("pending-cancel-001")][-2:],
+                [FlowEventKind.OPERATION_OUTCOME_UNKNOWN,
+                 FlowEventKind.OPERATION_RECONCILED],
+            )
+
     def test_reconciliation_that_confirms_not_applied_does_not_auto_retry(self):
         profile = make_profile()
         harness = CrashHarness(profile, "deploy.publish")
