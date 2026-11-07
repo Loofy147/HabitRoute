@@ -77,7 +77,7 @@ The branch `research/adaptation-evaluation-and-durability-v1` adds:
 
 The paired evaluator is a research helper, not a statistical promotion gate. It does not calculate sample-size power or quality non-inferiority confidence intervals, validate real provider telemetry, establish raw trace provenance, or issue an activation verdict. Fixtures are synthetic and are not an eligible mining dataset.
 
-The GitHub Actions workflow now includes the new probe tests in the existing Python 3.11/3.12/3.13 matrix. The extension's CI result is pending until GitHub reports it for the new branch/PR.
+The GitHub Actions workflow includes the new probe tests in the existing Python 3.11/3.12/3.13 matrix. PR #7 run [42315856101](https://github.com/Loofy147/HabitRoute/actions/runs/42315856101) passed all three matrix jobs: 10 legacy experiment tests, 108 core/contract tests (including the two crash-window characterizations), and 13 paired-evaluator tests per Python version. The first run exposed a fixture inconsistency in the explicit-unloaded case; the test fixture was corrected and the final run passed. The failure reproduction remains a finding, not a recovery fix.
 
 ## Important execution boundary
 
@@ -92,7 +92,8 @@ For a multi-operation habit, the worker calls the sequence executor and commits 
 - PR #4 earlier contract run [42231017168](https://github.com/Loofy147/HabitRoute/actions/runs/42231017168) passed 97 tests per Python matrix before the latest canonicalization requirement was added to the trace schema; the dependent fixture correction is included in PR #6.
 - PR #6 run [42313250815](https://github.com/Loofy147/HabitRoute/actions/runs/42313250815) passed **104 tests on each of Python 3.11, 3.12 and 3.13**.
 - CI installs `jsonschema>=4.23,<5` for schema/contract tests; HabitRoute's runtime dependency list remains empty.
-- PR #4 remains a draft against `docs/unified-runtime-foundation`; PR #6 remains a draft against the PR #4 branch. Neither is merged into main.
+- PR #7 run [42315856101](https://github.com/Loofy147/HabitRoute/actions/runs/42315856101) passed 10 legacy experiment tests + 108 core/contract tests + 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (131 per version). The CodeRabbit review check was skipped because the PR is draft.
+- PR #4 remains a draft against `docs/unified-runtime-foundation`; PR #6 remains a draft against the PR #4 branch; PR #7 remains a draft against PR #6's branch. None is merged into main.
 - Historical 77/77 count applies to commit `090fc7c3fddbc95c7b128045fa7a20ab3dd63400`, not the current tested branch.
 - Legacy simulator tests remain under `experiments/step_savings_v1/`.
 
