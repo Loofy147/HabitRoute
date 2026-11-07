@@ -207,6 +207,10 @@ class OperationIntent:
     idempotency_key: str
     attempt: int
     input_sha256: str
+    harness_id: str
+    harness_version: str
+    environment_id: str
+    context_id: str
     idempotency_key_supported: bool = False
 
     def __post_init__(self) -> None:
@@ -215,6 +219,9 @@ class OperationIntent:
             raise ValueError("operation index must be non-negative and attempt positive")
         if not self.operation_ref.strip() or not self.idempotency_key.strip():
             raise ValueError("operation reference and idempotency key must be non-empty")
+        for name in ("harness_id", "harness_version", "environment_id", "context_id"):
+            if not getattr(self, name).strip():
+                raise ValueError(f"{name} must be non-empty")
         if len(self.input_sha256) != 64 or any(
             char not in "0123456789abcdef" for char in self.input_sha256.lower()
         ):
@@ -231,6 +238,10 @@ class OperationCheckpoint:
     idempotency_key: str
     attempt: int
     input_sha256: str
+    harness_id: str
+    harness_version: str
+    environment_id: str
+    context_id: str
     duration_ms: float | None
     resource_units: float | None
     external_cost: float | None
@@ -244,6 +255,9 @@ class OperationCheckpoint:
             raise ValueError("checkpoint operation index must be non-negative and attempt positive")
         if not self.operation_ref.strip() or not self.idempotency_key.strip():
             raise ValueError("checkpoint operation reference and key must be non-empty")
+        for name in ("harness_id", "harness_version", "environment_id", "context_id"):
+            if not getattr(self, name).strip():
+                raise ValueError(f"{name} must be non-empty")
         if len(self.input_sha256) != 64 or any(
             char not in "0123456789abcdef" for char in self.input_sha256.lower()
         ):
@@ -463,6 +477,10 @@ def _pending_operation_from_payload(payload: Mapping[str, str]) -> OperationInte
             idempotency_key=payload["$op.idempotency_key"],
             attempt=int(payload["$op.attempt"]),
             input_sha256=payload["$op.input_sha256"],
+            harness_id=payload["$op.harness_id"],
+            harness_version=payload["$op.harness_version"],
+            environment_id=payload["$op.environment_id"],
+            context_id=payload["$op.context_id"],
             idempotency_key_supported=payload.get("$op.idempotency_key_supported") == "true",
         )
     except (KeyError, TypeError, ValueError) as exc:
@@ -503,6 +521,10 @@ def _checkpoint_from_event(
         idempotency_key=pending.idempotency_key,
         attempt=pending.attempt,
         input_sha256=pending.input_sha256,
+        harness_id=pending.harness_id,
+        harness_version=pending.harness_version,
+        environment_id=pending.environment_id,
+        context_id=pending.context_id,
         duration_ms=optional_float("duration_ms"),
         resource_units=optional_float("resource_units"),
         external_cost=optional_float("external_cost"),
@@ -768,6 +790,7 @@ class PersistentFlow:
     def begin_operation(
         self, *, operation_index: int, operation_ref: str, effect: OperationEffect,
         idempotency_key: str, attempt: int, input_sha256: str,
+        harness_id: str, harness_version: str, environment_id: str, context_id: str,
         idempotency_key_supported: bool = False,
     ) -> FlowSnapshot:
         if type(idempotency_key_supported) is not bool:
@@ -779,7 +802,11 @@ class PersistentFlow:
             "$op.idempotency_key": idempotency_key,
             "$op.attempt": str(attempt),
             "$op.input_sha256": input_sha256,
-            "$op.idempotency_key_supported": str(bool(idempotency_key_supported)).lower(),
+            "$op.harness_id": harness_id,
+            "$op.harness_version": harness_version,
+            "$op.environment_id": environment_id,
+            "$op.context_id": context_id,
+            "$op.idempotency_key_supported": str(idempotency_key_supported).lower(),
         }
         return self._commit(FlowEventKind.OPERATION_INTENT, self.snapshot.current_node, payload)
 
