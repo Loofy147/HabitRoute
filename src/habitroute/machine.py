@@ -389,10 +389,12 @@ def execute_machine_habit(
     run_id: str,
     approved_operations: frozenset[str] = frozenset(),
 ) -> MachineHabitExecutionResult:
-    """Execute one authorized machine habit through a provider-neutral harness.
+    """Execute one authorized machine habit as an in-process, non-durable call.
 
     Retries reuse the same idempotency key for one logical operation step. Unknown
     outcomes and incomplete postconditions stop the habit for reconciliation.
+    This helper does not persist operation intents/results or resume after process
+    termination. Use FlowWorker with PersistentFlow for journaled execution.
     """
     state = dict(initial_state)
     records: list[OperationExecutionRecord] = []
