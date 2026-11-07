@@ -283,7 +283,7 @@ class FlowWorker:
         progressing = bool(flow.snapshot.completed_operations or flow.snapshot.pending_operation)
         if progressing:
             authorization = self._authorize_habit_resume(habit)
-            if not authorization:
+            if authorization is not None:
                 return self._attention(flow, authorization)
         else:
             authorization = authorize_machine_habit(
