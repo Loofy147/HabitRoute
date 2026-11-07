@@ -55,11 +55,11 @@ Mutable run instance pinned to one flow-definition version. Stores its run ID, c
 
 Append-only events plus snapshots/checkpoints. The current local JSONL implementation uses a single-writer-per-run contract, complete-write loops, fsync of each event and POSIX parent-directory fsync on first run-file creation.
 
-Provider operations are recorded as individual intent/result pairs. The intent includes a stable idempotency key, operation index, attempt and input digest and is fsynced before adapter invocation. A successful result records outputs and cost observations as a durable checkpoint. A flow node cannot complete while an operation intent remains pending. Multi-operation habits commit every step separately and resume after the last completed checkpoint.
+Provider operations are recorded as individual intent/result pairs. The intent includes a stable idempotency key, operation index, attempt, input digest, and pinned harness/environment/context identity; it is fsynced before adapter invocation. A successful result records outputs and cost observations as a durable checkpoint. A flow node cannot complete while an operation intent remains pending. Multi-operation habits commit every step separately and resume after the last completed checkpoint.
 
 Recovery behavior depends on the operation contract. READ_ONLY and IDEMPOTENT effects may be reissued. DEDUPLICATED effects may be reissued only if the actual adapter/provider durably enforces the supplied key. Pending NON_REPEATABLE or COMPENSATABLE effects stop for reconciliation. Node-visit-scoped keys prevent a later loop visit being confused with an earlier visit.
 
-This local journal cannot atomically commit with arbitrary remote providers. It does not establish exactly-once external effects, distributed multi-writer safety, or production-grade corrupted-tail recovery. See [OPERATION_CHECKPOINTS_AND_RECOVERY.md](OPERATION_CHECKPOINTS_AND_RECOVERY.md).
+Recovery rejects a pending intent if the active harness/environment/context identity differs from the one that created it. The journal truncates an unterminated final record while preserving earlier committed records, and refuses to repair newline-terminated corruption. This local journal cannot atomically commit with arbitrary remote providers. It does not establish exactly-once external effects, distributed multi-writer safety, or production-grade corrupted-tail recovery. See [OPERATION_CHECKPOINTS_AND_RECOVERY.md](OPERATION_CHECKPOINTS_AND_RECOVERY.md).
 
 ### Evidence and provenance
 
