@@ -185,7 +185,7 @@ class FlowWorker:
         if completed is not None:
             return self._finish_operation_node(flow, node.node_id, completed)
 
-        key = flow.idempotency_key
+        key = flow.operation_scope_key
         pending = self._pending_for(
             flow, operation_index=0, operation=operation,
             idempotency_key=key, inputs=inputs,
@@ -316,7 +316,7 @@ class FlowWorker:
             if missing:
                 return self._attention(flow, "input_binding_missing:" + ",".join(missing))
 
-            key = f"{flow.idempotency_key}:{habit.habit_id}:{habit.version}:{index}"
+            key = f"{flow.operation_scope_key}:{habit.habit_id}:{habit.version}:{index}"
             pending = self._pending_for(
                 flow, operation_index=index, operation=operation,
                 idempotency_key=key, inputs=inputs,
@@ -420,7 +420,7 @@ class FlowWorker:
             "habit_version": str(habit.version),
             "operation_count": str(len(checkpoints)),
             **self._checkpoint_cost_metadata(checkpoints),
-            "habit_idempotency_scope": flow.idempotency_key,
+            "habit_idempotency_scope": flow.operation_scope_key,
         })
         return self._result_after_transition(flow, node.node_id, "habit_succeeded")
 
