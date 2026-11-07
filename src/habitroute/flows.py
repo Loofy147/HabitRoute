@@ -513,6 +513,9 @@ def apply_flow_event(
         if snapshot.pending_operation is not None:
             raise ValueError("another operation intent is already pending")
         intent = _pending_operation_from_payload(payload)
+        expected_operation_index = len(snapshot.completed_operations)
+        if intent.operation_index != expected_operation_index:
+            raise ValueError("operation intent must match the next sequential operation index")
         if snapshot.completed_operation(intent.operation_index) is not None:
             raise ValueError("operation index is already checkpointed")
         if intent.attempt != snapshot.operation_attempt_count(intent.operation_index) + 1:
@@ -652,6 +655,10 @@ def apply_flow_event(
             raise ValueError("flow is not paused")
         updated = replace(snapshot, status=snapshot.resume_status, resume_status=None)
     elif event.kind is FlowEventKind.CANCELLED:
+        if snapshot.pending_operation is not None:
+            raise ValueError(
+                "cannot cancel a flow with an unresolved external operation; reconcile first"
+            )
         updated = replace(snapshot, status=FlowStatus.CANCELLED, resume_status=None)
     elif event.kind is FlowEventKind.NEEDS_ATTENTION:
         context = snapshot.context_dict()
@@ -858,6 +865,10 @@ class PersistentFlow:
         return self._commit(FlowEventKind.RESUMED, self.snapshot.current_node)
 
     def cancel(self, reason: str = "cancelled") -> FlowSnapshot:
+        if self.snapshot.pending_operation is not None:
+            raise ValueError(
+                "cannot cancel a flow with an unresolved external operation; reconcile first"
+            )
         return self._commit(FlowEventKind.CANCELLED, self.snapshot.current_node, {"reason": reason})
 
     def needs_attention(
