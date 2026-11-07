@@ -35,6 +35,7 @@
 - Per-operation intent, success, failure, unknown-outcome and reconciliation events; replay reconstructs pending intents, attempt counters and completed operation checkpoints.
 - Per-node-visit operation scopes remain stable across retries but change when a flow loops back to the same node.
 - Operation intents and checkpoints record harness ID/version and environment/context; recovery rejects pending replay when these declared scope values change.
+- The declared harness identity/version is not an independently measured adapter build/configuration fingerprint; implementation changes must currently increment the declared version.
 - Loader truncates only an unterminated final append tail and retains newline-terminated corruption as a hard error.
 - The reducer rejects operation-index gaps and refuses to cancel a flow while an external operation intent remains unresolved, preserving the reconciliation path.
 - Recovery by replaying the journal into the flow reducer.
@@ -129,6 +130,7 @@ See [OPERATION_CHECKPOINTS_AND_RECOVERY.md](OPERATION_CHECKPOINTS_AND_RECOVERY.m
 - No production adapter invokes external APIs, CLIs, repositories, scripts or agent runtimes.
 - No production-grade provider enforcement for credentials, egress, hard resource/time budgets, cancellation or output limits.
 - No actual provider-specific idempotency-key conformance proof or lookup/reconciliation adapter.
+- No independently measured adapter implementation/build/configuration fingerprint beyond declared harness ID/version and environment/context values.
 - No independently measured adapter implementation/build fingerprint beyond declared harness ID/version and environment/context values; adapters must version implementation changes honestly until a stronger fingerprint contract exists.
 - No authenticated reconciliation service; the current core method only records caller-supplied actor and evidence-reference strings.
 - No multi-worker/multi-host execution; JSONL remains single-writer-per-run.
