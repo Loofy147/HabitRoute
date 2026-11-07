@@ -64,6 +64,21 @@ The protocol requires held-success, independently revalidated traces before expe
 
 PR #6's first CI run identified a stale hand-designed trace fixture after the v0.1 trace schema made canonicalization mandatory; the fixture was corrected in the follow-on branch. The corrected run [42313250815](https://github.com/Loofy147/HabitRoute/actions/runs/42313250815) passed 104 tests per Python version. After adding explicit negative tests and schema constraints for NET_BENEFIT, final run [42313443509](https://github.com/Loofy147/HabitRoute/actions/runs/42313443509) passed **106 tests on each of Python 3.11, 3.12 and 3.13**.
 
+
+## Research synthesis and executable probe extension
+
+The branch `research/adaptation-evaluation-and-durability-v1` adds:
+
+- `docs/RESEARCH_SYNTHESIS_AND_EXPERIMENT_PROGRAM.md`: evidence-linked research synthesis covering retrospective harness adaptation, contrastive trajectory diagnosis, event-log granularity, causal/paired evaluation, durable execution, runtime enforcement, modular evolution, CPM factorial testing, canarying and drift.
+- `experiments/adaptation_eval_v1/`: dependency-free paired-trial analysis probe. It validates pair identity, opportunity/action observability, trace completeness, adaptation digest consistency and explicit loading/fingerprint consistency. It retains assigned treatment trials in the intention-to-treat denominator, keeps cost metrics in separate units, and reports missingness instead of converting it to zero.
+- `tests/test_crash_window_characterization.py`: deterministic fault-injection characterization against the current `FlowWorker`. It simulates abrupt process termination after an external provider effect but before a journal acknowledgement, then restores from the JSONL journal.
+
+**Observed implication:** the characterization tests are expected to reproduce duplicate external effects for a non-repeatable ordinary operation and a multi-operation habit after replay. The journal records only the initial flow start before the replay, while the restored flow remains at the same node. These tests document an existing failure mode; they do not fix it and must not be counted as a successful reliability result.
+
+The paired evaluator is a research helper, not a statistical promotion gate. It does not calculate sample-size power or quality non-inferiority confidence intervals, validate real provider telemetry, establish raw trace provenance, or issue an activation verdict. Fixtures are synthetic and are not an eligible mining dataset.
+
+The GitHub Actions workflow includes the new probe tests in the existing Python 3.11/3.12/3.13 matrix. PR #7 run [42315856101](https://github.com/Loofy147/HabitRoute/actions/runs/42315856101) passed all three matrix jobs: 10 legacy experiment tests, 108 core/contract tests (including the two crash-window characterizations), and 13 paired-evaluator tests per Python version. The first run exposed a fixture inconsistency in the explicit-unloaded case; the test fixture was corrected and the final run passed. The failure reproduction remains a finding, not a recovery fix.
+
 ## Important execution boundary
 
 The worker exists; older status text and issue bodies that say it is missing are stale. However, the ordinary operation-node path and multi-operation habit path have different checkpoint granularity.
@@ -77,7 +92,8 @@ For a multi-operation habit, the worker calls the sequence executor and commits 
 - PR #4 earlier contract run [42231017168](https://github.com/Loofy147/HabitRoute/actions/runs/42231017168) passed 97 tests per Python matrix before the latest canonicalization requirement was added to the trace schema; the dependent fixture correction is included in PR #6.
 - PR #6 run [42313250815](https://github.com/Loofy147/HabitRoute/actions/runs/42313250815) passed **104 tests on each of Python 3.11, 3.12 and 3.13**.
 - CI installs `jsonschema>=4.23,<5` for schema/contract tests; HabitRoute's runtime dependency list remains empty.
-- PR #4 remains a draft against `docs/unified-runtime-foundation`; PR #6 remains a draft against the PR #4 branch. Neither is merged into main.
+- PR #7 run [42315937577](https://github.com/Loofy147/HabitRoute/actions/runs/42315937577) passed 10 legacy experiment tests + 108 core/contract tests + 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (131 per version). The CodeRabbit review check was skipped because the PR is draft.
+- PR #4 remains a draft against `docs/unified-runtime-foundation`; PR #6 remains a draft against the PR #4 branch; PR #7 remains a draft against PR #6's branch. None is merged into main.
 - Historical 77/77 count applies to commit `090fc7c3fddbc95c7b128045fa7a20ab3dd63400`, not the current tested branch.
 - Legacy simulator tests remain under `experiments/step_savings_v1/`.
 
@@ -89,7 +105,7 @@ For a multi-operation habit, the worker calls the sequence executor and commits 
 - No transactional coordination between external operations and the local flow journal.
 - No guarantee of exactly-once external side effects.
 - No durable habit registry; current registry is in-memory exact-version lookup.
-- No trace-ingestion pipeline, automatic candidate discovery, paired-trial evidence system or automated promotion/quarantine.
+- No production trace-ingestion pipeline, automatic candidate discovery, durable paired-trial evidence store or automated promotion/quarantine. The new paired evaluator is research-only.
 - Efficiency profiles are caller-supplied aggregates; cohort label equality does not prove matching raw case identities or independent verification.
 - Cost propagation is incomplete across multi-operation habit records and flow metadata; token, context, compute and memory measurements are not comprehensive.
 - No external SQL/event store, distributed lock/lease or multi-worker-per-run support.
@@ -103,7 +119,7 @@ For a multi-operation habit, the worker calls the sequence executor and commits 
 1. Review and merge the architecture preparation and hand-design PRs in dependency order; keep the habit in design-only state until runtime gates exist.
 2. Implement structured append-only trace events and a separate immutable decision/outcome ledger; add semantic validation and replay/integrity tests.
 3. Add operation-level durable intent/result/checkpoint records for multi-operation habits.
-4. Define idempotency/reconciliation semantics and inject crashes around provider side effects.
+4. Define idempotency/reconciliation semantics and inject crashes around provider side effects. The new characterization test proves the current replay hazard is reproducible; a fix remains open.
 5. Enforce complete budget, evidence, constraint, intervention and later-revalidation gates in a verdict evaluator.
 6. Replace caller-supplied aggregate profiles as the sole efficiency evidence with raw paired trial records and independent verification.
 7. Add a concrete read-only harness adapter and prove actual policy enforcement; only then stage discovery/promotion.

@@ -32,8 +32,10 @@ jobs:
         working-directory: experiments/step_savings_v1
         run: python -c "import habit_system; passed, total = habit_system.selftest(); assert passed == total, f'{passed}/{total}'; print(f'{passed}/{total} assertions passed')"
       - name: Compile new core and tests
-        run: python -m compileall -q src tests
+        run: python -m compileall -q src tests experiments/adaptation_eval_v1
       - name: Run new core contract tests
         env:
           PYTHONPATH: src
         run: python -m unittest discover -s tests -v
+      - name: Run retrospective paired-evaluation probe tests
+        run: python -m unittest discover -s experiments/adaptation_eval_v1 -p 'test_*.py' -v

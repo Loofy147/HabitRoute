@@ -1,6 +1,6 @@
 # Roadmap
 
-This roadmap separates the existing HabitRoute core from the broader Unified Agent Runtime integration. Checkboxes reflect the inspected 2026-11-06 snapshot; future completion requires evidence.
+This roadmap separates the existing HabitRoute core from the broader Unified Agent Runtime integration. Checkboxes distinguish completed research/probes from runtime implementation; future completion requires evidence.
 
 ## Precondition for discovery — hand-design before mining
 
@@ -20,6 +20,18 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 - [ ] Execute this habit across independent read-only repository tasks and retain verifiable records.
 
 **Gate:** no mining until runtime-produced traces and separate decision/outcome records are complete, independently verified, budgeted and revalidated. The adaptation protocol and its schemas are design artifacts only; they do not activate the habit or authorize mining.
+
+## Research synthesis and probes
+
+- [x] Document cross-disciplinary findings, evidence status, limits and the staged experimental program in [RESEARCH_SYNTHESIS_AND_EXPERIMENT_PROGRAM.md](RESEARCH_SYNTHESIS_AND_EXPERIMENT_PROGRAM.md).
+- [x] Add a dependency-free paired-trial analysis probe under `experiments/adaptation_eval_v1/`.
+- [x] Test paired recurrence cells, opportunity/action missingness, intention-to-treat loading, digest consistency, cost dimensions and hard-constraint reporting.
+- [x] Add deterministic crash-window characterization tests against the actual flow worker.
+- [x] Include the new test suite in the Python CI matrix.
+- [x] Obtain passing CI for the extension branch: [42315856101](https://github.com/Loofy147/HabitRoute/actions/runs/42315856101) passed 131 tests per Python version (3.11/3.12/3.13); draft review remains open.
+- [ ] Replace characterization expectations with safe-recovery tests after implementing durable operation checkpoints and provider reconciliation.
+
+**Interpretation:** the crash tests deliberately reproduce duplicate external effects after abrupt termination; they do not close HR-01/HR-02. The paired evaluator validates analysis mechanics only; it does not provide production trial evidence or a promotion decision.
 
 ## P0 — Preserve and reproduce existing research
 
@@ -50,7 +62,8 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 - [x] Implement a worker that dispatches operation nodes and exact-version habit nodes through a HarnessAdapter.
 - [x] Add worker tests for success, retry-key reuse, approval pause/resume, unknown outcomes, postcondition failure and exact-version habit lookup.
 - [ ] Commit a durable event/checkpoint after each operation inside a multi-operation habit.
-- [ ] Add fault injection after external side effects but before event acknowledgement.
+- [x] Add fault injection after external side effects but before event acknowledgement to reproduce the current duplicate-effect window.
+- [ ] Add intent/result/checkpoint persistence before and after every provider operation; replace the characterization tests with recovery guarantees under explicit provider idempotency/reconciliation contracts.
 
 **Gate:** ordinary flow state replays from committed events; per-operation durability for multi-step habits remains an open critical gate.
 
@@ -80,7 +93,8 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 - [ ] Use intention-to-treat recurrence comparisons; report adaptation loading as a diagnostic rather than filtering unexposed treatment sessions.
 - [ ] Independently verify outputs and side effects; retain unknowns, failed trials, intervention evidence and exclusions.
 - [ ] Measure unrelated work and separate cost dimensions including tokens, context, calls, latency, compute, money, retries, recovery and verification overhead.
-- [ ] Add deterministic evaluation from raw trials; reject empty, incomplete, mismatched, confounded or unverified evidence.
+- [x] Add a research-only deterministic paired-trial summarizer for synthetic cases; reject duplicate, incomplete, mismatched and unobservable data while preserving treatment assignment.
+- [ ] Build a durable, provenance-checked trial ledger and independent evaluator with sample-size/power rationale, quality non-inferiority intervals and pre-registered multiple-comparison controls.
 - [ ] Permit only NET_BENEFIT to reach human review; never auto-activate a retrospective proposal.
 - [ ] Add shadow evaluation, staged human approval, monitoring, drift detection, quarantine, rollback and a durable exact-version HabitRegistry.
 
