@@ -231,6 +231,43 @@ class DurableOperationCheckpointTests(unittest.TestCase):
             )
             self.assertEqual(harness.external_effects["deploy.publish"], 1)
 
+    def test_pending_idempotent_operation_is_not_replayed_across_harness_versions(self):
+        original_profile = make_profile()
+        original_harness = CrashHarness(original_profile, "orders.submit")
+        node = FlowNode(
+            "submit", FlowNodeKind.OPERATION, "orders.submit", "done",
+            max_attempts=2, effect=OperationEffect.IDEMPOTENT,
+        )
+        definition = FlowDefinition(
+            "harness-version-pinned-recovery", 1, "submit",
+            (node, FlowNode("done", FlowNodeKind.END)),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = JsonlFlowJournal(tmp)
+            flow = PersistentFlow.start(definition, "harness-pin-001", journal)
+            with self.assertRaises(SimulatedProcessCrash):
+                FlowWorker(original_harness).dispatch(flow)
+            self.assertEqual(len(original_harness.calls), 1)
+
+            changed_profile = HarnessProfile(
+                original_profile.harness_id, "2",
+                original_profile.environment_id, original_profile.context_id,
+                original_profile.allowed_operations,
+                original_profile.approval_required,
+                original_profile.max_step_attempts,
+                original_profile.supports_compensation,
+            )
+            changed_harness = CrashHarness(changed_profile, "never")
+            restored = PersistentFlow.restore(
+                definition, "harness-pin-001", JsonlFlowJournal(tmp)
+            )
+            result = FlowWorker(changed_harness).dispatch(restored)
+            self.assertEqual(result.status, DispatchStatus.NEEDS_ATTENTION)
+            self.assertEqual(changed_harness.calls, [])
+            self.assertEqual(restored.snapshot.status, FlowStatus.NEEDS_ATTENTION)
+            self.assertIsNotNone(restored.snapshot.pending_operation)
+            self.assertEqual(len(original_harness.calls), 1)
+
     def test_provider_deduplicated_operation_retries_pending_intent_with_same_key(self):
         profile = make_profile()
         harness = CrashHarness(profile, "orders.submit")
