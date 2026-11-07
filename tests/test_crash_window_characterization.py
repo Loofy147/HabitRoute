@@ -71,6 +71,13 @@ class FailOperationResultJournal(JsonlFlowJournal):
         super().append(event)
 
 
+class FailFlowCompletionJournal(JsonlFlowJournal):
+    def append(self, event):
+        if event.kind is FlowEventKind.STEP_SUCCEEDED:
+            raise OSError("simulated flow completion append failure")
+        super().append(event)
+
+
 def make_profile() -> HarnessProfile:
     return HarnessProfile(
         "fault-injection-harness", "1", "ci-linux", "repository-x",
@@ -277,6 +284,42 @@ class DurableOperationCheckpointTests(unittest.TestCase):
                 [event.kind for event in JsonlFlowJournal(tmp).load("intent-fail-001")],
                 [FlowEventKind.STARTED],
             )
+
+    def test_committed_operation_checkpoint_is_not_reinvoked_if_node_completion_write_fails(self):
+        profile = make_profile()
+        harness = CrashHarness(profile, "no-crash")
+        node = FlowNode(
+            "publish", FlowNodeKind.OPERATION, "deploy.publish", "done",
+            effect=OperationEffect.NON_REPEATABLE,
+            postconditions=(("release.published", "true"),),
+        )
+        definition = FlowDefinition(
+            "node-completion-write-failure", 1, "publish",
+            (node, FlowNode("done", FlowNodeKind.END)),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = FailFlowCompletionJournal(tmp)
+            flow = PersistentFlow.start(definition, "node-finish-fail-001", journal)
+            with self.assertRaisesRegex(OSError, "flow completion append failure"):
+                FlowWorker(harness).dispatch(flow)
+
+            self.assertEqual(harness.external_effects["deploy.publish"], 1)
+            self.assertEqual(
+                [event.kind for event in JsonlFlowJournal(tmp).load("node-finish-fail-001")],
+                [FlowEventKind.STARTED, FlowEventKind.OPERATION_INTENT,
+                 FlowEventKind.OPERATION_SUCCEEDED],
+            )
+
+            restored = PersistentFlow.restore(
+                definition, "node-finish-fail-001", JsonlFlowJournal(tmp)
+            )
+            self.assertEqual(len(restored.snapshot.completed_operations), 1)
+            self.assertIsNone(restored.snapshot.pending_operation)
+            finished = FlowWorker(harness).dispatch(restored)
+            self.assertEqual(finished.status, DispatchStatus.TERMINAL)
+            self.assertEqual(restored.snapshot.status, FlowStatus.SUCCEEDED)
+            self.assertEqual(harness.external_effects["deploy.publish"], 1)
+            self.assertEqual(len(harness.calls), 1)
 
     def test_result_checkpoint_failure_keeps_nonrepeatable_intent_for_reconciliation(self):
         profile = make_profile()
