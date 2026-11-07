@@ -203,7 +203,7 @@ class PersistentFlowTests(unittest.TestCase):
             )
             self.assertEqual(restored.snapshot.last_event_sequence, 1)
             self.assertEqual(len(JsonlFlowJournal(tmp).load("run-torn-001")), 1)
-            self.assertTrue(path.read_bytes().endswith(b"\\n"))
+            self.assertTrue(path.read_bytes().endswith(b"\n"))
             restored.fail_step("retry-after-torn-uncommitted-append")
             self.assertEqual(
                 [event.sequence for event in JsonlFlowJournal(tmp).load("run-torn-001")],
