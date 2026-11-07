@@ -28,7 +28,7 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 - [x] Test paired recurrence cells, opportunity/action missingness, intention-to-treat loading, digest consistency, cost dimensions and hard-constraint reporting.
 - [x] Add deterministic crash-window characterization tests against the actual flow worker.
 - [x] Include the new test suite in the Python CI matrix.
-- [ ] Obtain passing CI for the extension branch and review findings.
+- [x] Obtain passing CI for the extension branch: [42315856101](https://github.com/Loofy147/HabitRoute/actions/runs/42315856101) passed 131 tests per Python version (3.11/3.12/3.13); draft review remains open.
 - [ ] Replace characterization expectations with safe-recovery tests after implementing durable operation checkpoints and provider reconciliation.
 
 **Interpretation:** the crash tests deliberately reproduce duplicate external effects after abrupt termination; they do not close HR-01/HR-02. The paired evaluator validates analysis mechanics only; it does not provide production trial evidence or a promotion decision.
