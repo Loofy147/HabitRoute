@@ -32,7 +32,7 @@ def make_trial(
         pair_id=pair, case_id=f"case-{pair}", arm=arm,
         input_sha256=D, task_signature_sha256=B,
         base_harness_sha256=C,
-        effective_harness_sha256=E if adapted else C,
+        effective_harness_sha256=(C if loaded is False else E) if adapted else C,
         environment_sha256=environment, agent_sha256=D, model_sha256=B,
         opportunity_present=opportunity, target_action_observed=action,
         task_success=task_success, contract_passed=contract_passed,
