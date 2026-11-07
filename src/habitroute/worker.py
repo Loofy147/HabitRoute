@@ -93,6 +93,8 @@ class FlowWorker:
     def dispatch(self, flow: PersistentFlow) -> FlowDispatchResult:
         snapshot = flow.snapshot
         node = flow.current_node
+        if snapshot.status is FlowStatus.NEEDS_ATTENTION:
+            return FlowDispatchResult(DispatchStatus.NEEDS_ATTENTION, node.node_id, snapshot.status.value)
         if snapshot.status in self._TERMINAL:
             return FlowDispatchResult(DispatchStatus.TERMINAL, node.node_id, snapshot.status.value)
         if snapshot.status is FlowStatus.PAUSED:
