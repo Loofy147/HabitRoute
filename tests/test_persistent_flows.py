@@ -55,6 +55,35 @@ class PersistentFlowTests(unittest.TestCase):
             self.assertNotEqual(flow.operation_scope_key, first_key)
             self.assertEqual(flow.snapshot.operation_attempt_count(0), 0)
 
+
+    def test_operation_intents_must_follow_sequential_checkpoint_indices(self):
+        habit_flow = FlowDefinition(
+            "sequential-checkpoints", 1, "habit",
+            (
+                FlowNode(
+                    "habit", FlowNodeKind.HABIT, "multi-step-habit", "done",
+                    target_version=1,
+                ),
+                FlowNode("done", FlowNodeKind.END),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            flow = PersistentFlow.start(
+                habit_flow, "run-sequential-001", JsonlFlowJournal(tmp)
+            )
+            with self.assertRaisesRegex(ValueError, "next sequential operation index"):
+                flow.begin_operation(
+                    operation_index=1,
+                    operation_ref="repo.test.second",
+                    effect=OperationEffect.READ_ONLY,
+                    idempotency_key=f"{flow.operation_scope_key}:habit:1",
+                    attempt=1,
+                    input_sha256="a" * 64,
+                )
+            self.assertEqual(flow.snapshot.operation_index if hasattr(flow.snapshot, "operation_index") else 0, 0)
+            self.assertIsNone(flow.snapshot.pending_operation)
+            self.assertEqual(len(flow.journal.load("run-sequential-001")), 1)
+
     def test_retry_preserves_idempotency_key_and_failure_branch(self):
         flow_def = definition()
         with tempfile.TemporaryDirectory() as tmp:
