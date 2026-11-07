@@ -1,6 +1,6 @@
 # Operation Checkpoints and Recovery Contract
 
-**Status:** implemented in draft PR #8; provider-independent local protocol with deterministic fault-injection tests. Not a claim of exactly-once execution or a production provider integration.
+**Status:** implemented in draft PR #8 at head `455c31f20ed198b70cd4696b983d562558dfc39d`; CI run [42317958263](https://github.com/Loofy147/HabitRoute/actions/runs/42317958263) passed 138 tests per Python version. This is a provider-independent local protocol with deterministic fault-injection tests, not a claim of exactly-once execution or a production provider integration.
 
 ## 1. Purpose
 
@@ -26,7 +26,7 @@ The intent is appended and fsynced before the adapter is called. On POSIX, the j
 
 A successful operation event persists outputs and observed duration, resource units and external cost. It becomes a completed-operation checkpoint in the reducer. A multi-operation habit commits one result per operation. Its final flow-node success event is separate and is committed only after all operation checkpoints and postconditions are satisfied.
 
-The reducer rejects a result that does not match the pending operation index and idempotency key. It rejects a new intent while another intent is pending or when the attempt number is not the next expected attempt. A flow node cannot be completed or failed while an operation intent remains pending.
+The reducer rejects a result that does not match the pending operation index and idempotency key. It rejects a new intent while another intent is pending, when the attempt number is not the next expected attempt, or when its index skips the next sequential operation. A flow node cannot be completed or failed while an operation intent remains pending. A flow with a pending external operation also cannot be cancelled until that operation has been reconciled; cancellation must not discard the only recovery handle for an ambiguous side effect.
 
 ## 3. Recovery matrix
 
@@ -68,7 +68,9 @@ The test suite now exercises:
 - DEDUPLICATED provider simulation: the same key is retried after lost acknowledgement and the provider applies the effect once;
 - applied reconciliation: the operation is recorded complete and the worker continues without replay;
 - not-applied reconciliation: the flow remains in NEEDS_ATTENTION and does not retry automatically;
-- node-loop visit: retry retains its key while a later visit to the same node gets a different key.
+- node-loop visit: retry retains its key while a later visit to the same node gets a different key;
+- cancellation with an unresolved intent is refused so the flow remains reconcilable;
+- an out-of-order operation index is rejected by the reducer.
 
 The provider deduplication test is a simulated adapter contract. It does not prove any real provider's implementation. Tests of that guarantee must be added for each concrete adapter and provider version.
 
@@ -82,6 +84,7 @@ The provider deduplication test is a simulated adapter contract. It does not pro
 - A checkpointed prefix of a multi-operation habit is skipped after recovery.
 - A failed local result append leaves the previously committed intent available for recovery.
 - Operation attempts and idempotency identity are derived from the event history and replay deterministically in the tested local journal.
+- An unresolved operation cannot be hidden by a terminal cancellation event; a skipped operation index cannot enter the checkpoint history.
 
 ### Not established
 
