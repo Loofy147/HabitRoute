@@ -145,6 +145,11 @@ class FlowWorker:
             or pending.idempotency_key != idempotency_key
             or pending.input_sha256 != self._input_digest(inputs)
             or pending.idempotency_key_supported != operation.idempotency_key_supported
+            or (pending.harness_id, pending.harness_version,
+                pending.environment_id, pending.context_id) != (
+                self.harness.profile.harness_id, self.harness.profile.version,
+                self.harness.profile.environment_id, self.harness.profile.context_id,
+            )
         ):
             self._attention(flow, "pending_operation_does_not_match_pinned_step")
             return False
@@ -212,6 +217,8 @@ class FlowWorker:
                 operation_index=0, operation_ref=operation.operation_ref,
                 effect=operation.effect, idempotency_key=key, attempt=attempt,
                 input_sha256=self._input_digest(inputs),
+                harness_id=profile.harness_id, harness_version=profile.version,
+                environment_id=profile.environment_id, context_id=profile.context_id,
                 idempotency_key_supported=operation.idempotency_key_supported,
             )
 
@@ -346,6 +353,10 @@ class FlowWorker:
                         operation_index=index, operation_ref=operation.operation_ref,
                         effect=operation.effect, idempotency_key=key, attempt=attempt,
                         input_sha256=self._input_digest(inputs),
+                        harness_id=self.harness.profile.harness_id,
+                        harness_version=self.harness.profile.version,
+                        environment_id=self.harness.profile.environment_id,
+                        context_id=self.harness.profile.context_id,
                         idempotency_key_supported=operation.idempotency_key_supported,
                     )
                 try:
