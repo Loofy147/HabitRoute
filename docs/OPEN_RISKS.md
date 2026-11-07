@@ -4,7 +4,7 @@
 
 | ID | Severity | Status | Risk | Required closure evidence |
 |---|---|---|---|---|
-| HR-01 | High | PARTIALLY CLOSED IN PR #8 | Local flow runs now persist per-operation intents and results; crash paths are covered with a deterministic adapter. Production durability across all supported storage filesystems and provider implementations is not yet established. | Full crash matrix on target filesystems; corruption/torn-write recovery; crash after each event transition; replay equivalence; external adapter tests. |
+| HR-01 | High | PARTIALLY CLOSED IN PR #8 | Local flow runs persist per-operation intents and results; crash paths, sequential-index validation and unresolved-operation cancellation refusal are covered with a deterministic adapter. Production durability across all supported storage filesystems and provider implementations is not yet established. | Full crash matrix on target filesystems; corruption/torn-write recovery; crash after each event transition; replay equivalence; external adapter tests. |
 | HR-02 | Critical | OPEN | A local JSONL journal cannot be atomically committed with an arbitrary remote provider effect. A pending intent can represent either "provider never received it" or "provider applied it and acknowledgement was lost." | Provider-specific idempotency/deduplication contract or authoritative lookup/reconciliation; adapter conformance tests for lost acknowledgements, duplicate delivery and stable-key behavior. |
 | HR-03 | High | OPEN | EfficiencyGate accepts caller-supplied aggregate profiles. | Raw paired trial ledger, exact matched case IDs, independent verifier and mutation-tested promotion gate. |
 | HR-04 | High | PARTIALLY OPEN | Per-operation duration/resource/external-cost observations are now checkpointed. Total cost propagation across provider tokens, context assembly, compute, memory and human recovery is still incomplete. | Typed per-step/flow/context cost vector, explicit unknown/missing values and aggregation tests. |
@@ -21,6 +21,8 @@
 
 ## What PR #8 establishes
 
+The current draft head `455c31f20ed198b70cd4696b983d562558dfc39d` passed [CI run 42317958263](https://github.com/Loofy147/HabitRoute/actions/runs/42317958263): 138 tests on each of Python 3.11, 3.12 and 3.13. This is local deterministic test evidence, not production-provider evidence.
+
 The worker now follows this local sequence for each provider operation:
 
 1. Append and fsync `OPERATION_INTENT` before invoking the adapter.
@@ -28,7 +30,7 @@ The worker now follows this local sequence for each provider operation:
 3. Append and fsync `OPERATION_SUCCEEDED`, `OPERATION_FAILED`, or `OPERATION_OUTCOME_UNKNOWN`.
 4. Advance the flow node only after required operation checkpoints exist.
 
-The JSONL journal now writes until the complete record has been appended, fsyncs the file, and fsyncs the parent directory when creating the run file on POSIX. A machine-habit worker checkpoints each operation and resumes from the committed prefix.
+The JSONL journal now writes until the complete record has been appended, fsyncs the file, and fsyncs the parent directory when creating the run file on POSIX. A machine-habit worker checkpoints each operation and resumes from the committed prefix. The reducer also rejects skipped operation indexes and refuses to cancel a flow while an unresolved external operation remains pending, so the reconciliation path is not discarded by a terminal cancellation.
 
 Recovery behavior is conservative:
 
