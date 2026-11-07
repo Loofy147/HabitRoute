@@ -370,14 +370,28 @@ class JsonlFlowJournal:
             if event.sequence != expected:
                 raise ValueError(f"expected event sequence {expected}, got {event.sequence}")
             payload = (event.to_json() + "\n").encode("utf-8")
+            file_was_absent = not path.exists()
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
             try:
-                written = os.write(fd, payload)
-                if written != len(payload):
-                    raise OSError("short journal write")
+                view = memoryview(payload)
+                while view:
+                    written = os.write(fd, view)
+                    if written <= 0:
+                        raise OSError("journal append made no forward progress")
+                    view = view[written:]
+                # The intent/result line is durable before append returns.
                 os.fsync(fd)
             finally:
                 os.close(fd)
+
+            # Persist the new directory entry on POSIX before a caller may invoke
+            # an external operation based on the just-written intent.
+            if file_was_absent and os.name == "posix":
+                directory_fd = os.open(self.root, os.O_RDONLY)
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
 
 
 def _settle_at_node(
