@@ -26,12 +26,12 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 - [x] Document cross-disciplinary findings, evidence status, limits and the staged experimental program in [RESEARCH_SYNTHESIS_AND_EXPERIMENT_PROGRAM.md](RESEARCH_SYNTHESIS_AND_EXPERIMENT_PROGRAM.md).
 - [x] Add a dependency-free paired-trial analysis probe under `experiments/adaptation_eval_v1/`.
 - [x] Test paired recurrence cells, opportunity/action missingness, intention-to-treat loading, digest consistency, cost dimensions and hard-constraint reporting.
-- [x] Add deterministic crash-window characterization tests against the actual flow worker.
+- [x] Replace defect-characterization expectations with durable operation recovery tests against the actual flow worker.
 - [x] Include the new test suite in the Python CI matrix.
 - [x] Obtain passing CI for the extension branch: [42315856101](https://github.com/Loofy147/HabitRoute/actions/runs/42315856101) passed 131 tests per Python version (3.11/3.12/3.13); draft review remains open.
-- [ ] Replace characterization expectations with safe-recovery tests after implementing durable operation checkpoints and provider reconciliation.
+- [x] Replace the crash-defect characterization with safe local-journal recovery tests for intent, result-write failure, idempotency replay, multi-operation prefix resume and explicit reconciliation.
 
-**Interpretation:** the crash tests deliberately reproduce duplicate external effects after abrupt termination; they do not close HR-01/HR-02. The paired evaluator validates analysis mechanics only; it does not provide production trial evidence or a promotion decision.
+**Interpretation:** PR #7's crash tests reproduced duplicate external effects. PR #8 replaces those tests with local-journal recovery guarantees and passes CI, partially closing HR-01. HR-02 remains open because no local journal can atomically commit with an arbitrary provider. The paired evaluator validates analysis mechanics only; it does not provide production trial evidence or a promotion decision.
 
 ## P0 — Preserve and reproduce existing research
 
@@ -61,21 +61,29 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 - [x] Define operation-effect classes and stable idempotency keys.
 - [x] Implement a worker that dispatches operation nodes and exact-version habit nodes through a HarnessAdapter.
 - [x] Add worker tests for success, retry-key reuse, approval pause/resume, unknown outcomes, postcondition failure and exact-version habit lookup.
-- [ ] Commit a durable event/checkpoint after each operation inside a multi-operation habit.
-- [x] Add fault injection after external side effects but before event acknowledgement to reproduce the current duplicate-effect window.
-- [ ] Add intent/result/checkpoint persistence before and after every provider operation; replace the characterization tests with recovery guarantees under explicit provider idempotency/reconciliation contracts.
+- [x] Commit a durable per-operation intent before adapter invocation and result checkpoint after each operation inside a multi-operation habit.
+- [x] Add fault injection before intent commit, after external side effects but before acknowledgement, and after provider acknowledgement but before result checkpoint.
+- [x] Prove that a completed multi-operation prefix is skipped after recovery and that a pending non-repeatable effect is not reissued.
+- [x] Reject cancellation while an operation outcome is unresolved; require reconciliation first.
+- [x] Reject out-of-order or skipped operation checkpoint indices in the event reducer.
+- [x] Reject pending-operation replay when the declared harness ID/version or environment/context differs from the committed intent.
+- [x] Truncate only an unterminated final JSONL append tail; preserve and reject newline-terminated corrupt records.
+- [x] Pin pending operation intents to harness and environment/context identity; fail closed on drift during recovery.
+- [x] Test truncation of an unterminated trailing event while preserving a prior committed intent; reject newline-terminated corrupt records.
+- [ ] Validate recovery against actual provider idempotency/deduplication and reconciliation contracts.
 
-**Gate:** ordinary flow state replays from committed events; per-operation durability for multi-step habits remains an open critical gate.
+**Gate:** local per-operation intent/result replay, harness/environment identity pinning and the tested torn-tail policy are implemented in draft PR #8; run [42318545062](https://github.com/Loofy147/HabitRoute/actions/runs/42318545062) passed 146 tests per Python version. Provider/local-journal atomicity, actual provider key enforcement, authenticated reconciliation and target-filesystem power-loss/corruption behavior remain open.
 
 ## P3 — Harness enforcement and recovery
 
 - [x] Define provider-neutral HarnessAdapter protocol and typed operation outcomes.
 - [x] Add contract-level allowlist, approval and attempt checks.
 - [ ] Add actual provider-backed credential boundaries, egress controls, hard budgets, timeouts, cancellation and output limits.
-- [ ] Add independent environment/capability fingerprinting.
-- [ ] Add durable idempotency/deduplication or provider reconciliation.
+- [ ] Add an independently measured adapter/build/capability fingerprint; current intent pins only declared harness ID/version and environment/context IDs.
+- [ ] Verify durable idempotency/deduplication or authoritative lookup/reconciliation for a real provider adapter; local simulation is insufficient.
+- [ ] Put reconciliation behind authenticated operator authorization and immutable evidence binding.
 - [ ] Implement and test compensation before enabling compensatable operations.
-- [ ] Add deterministic test harness and crash-window fault injection.
+- [x] Add deterministic test harness and crash-window fault injection for the current local journal/worker boundary.
 - [ ] Add at least one concrete read-only external adapter.
 
 **Gate:** a harness control is only marked enforced after deny-path tests prove the provider boundary rejects prohibited actions.
@@ -131,4 +139,4 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 
 ## Immediate next task
 
-Continue in dependency order: review and settle the architecture preparation and hand-design PRs; implement runtime trace plus separate decision/outcome persistence and semantic validation; close per-operation checkpoint and crash/reconciliation gaps; enforce and independently revalidate the read-only reference habit. Only then run retrospective collection and matched transfer trials. Import CPM unchanged only after its source manifest and notices are reviewed. Do not mine historical conversation/log material or build an autonomous side-effecting runtime before these gates pass.
+Continue in dependency order: review the operation-checkpoint PR and validate a real provider idempotency/reconciliation contract; add authenticated reconciliation and target-filesystem crash/corruption tests; then implement runtime trace plus separate decision/outcome persistence and semantic validation; enforce and independently revalidate the read-only reference habit. Only then run retrospective collection and matched transfer trials. Import CPM unchanged only after its source manifest and notices are reviewed. Do not mine historical conversation/log material or build an autonomous side-effecting runtime before these gates pass.

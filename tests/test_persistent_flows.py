@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from pathlib import Path
 
 from habitroute.flows import (
     FlowDefinition, FlowEvent, FlowEventKind, FlowNode, FlowNodeKind,
@@ -35,6 +36,185 @@ class PersistentFlowTests(unittest.TestCase):
             self.assertEqual(flow.snapshot.status, FlowStatus.RUNNING)
             self.assertEqual(flow.current_node.node_id, "scan")
             self.assertEqual(flow.idempotency_key, "run-001:nightly-maintenance:3:scan")
+
+    def test_operation_scope_key_is_stable_for_retries_and_changes_on_node_revisit(self):
+        loop = FlowDefinition(
+            "self-loop", 1, "scan",
+            (FlowNode(
+                "scan", FlowNodeKind.OPERATION, "repo.scan", "scan",
+                max_attempts=2, effect=OperationEffect.READ_ONLY,
+            ),),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            flow = PersistentFlow.start(loop, "run-loop-001", JsonlFlowJournal(tmp))
+            first_key = flow.operation_scope_key
+            flow.fail_step("retryable")
+            self.assertEqual(flow.operation_scope_key, first_key)
+            flow.succeed_step()
+            self.assertEqual(flow.current_node.node_id, "scan")
+            self.assertEqual(flow.snapshot.node_visit_count("scan"), 2)
+            self.assertNotEqual(flow.operation_scope_key, first_key)
+            self.assertEqual(flow.snapshot.operation_attempt_count(0), 0)
+
+
+    def test_operation_intents_must_follow_sequential_checkpoint_indices(self):
+        habit_flow = FlowDefinition(
+            "sequential-checkpoints", 1, "habit",
+            (
+                FlowNode(
+                    "habit", FlowNodeKind.HABIT, "multi-step-habit", "done",
+                    target_version=1,
+                ),
+                FlowNode("done", FlowNodeKind.END),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            flow = PersistentFlow.start(
+                habit_flow, "run-sequential-001", JsonlFlowJournal(tmp)
+            )
+            with self.assertRaisesRegex(ValueError, "next sequential operation index"):
+                flow.begin_operation(
+                    operation_index=1,
+                    operation_ref="repo.test.second",
+                    effect=OperationEffect.READ_ONLY,
+                    idempotency_key=f"{flow.operation_scope_key}:habit:1",
+                    attempt=1,
+                    input_sha256="a" * 64,
+                    harness_id="test-harness", harness_version="1",
+                    environment_id="linux-test", context_id="repo-test",
+                )
+            self.assertEqual(len(flow.snapshot.completed_operations), 0)
+            self.assertEqual(flow.snapshot.operation_attempt_count(0), 0)
+            self.assertIsNone(flow.snapshot.pending_operation)
+            self.assertEqual(len(flow.journal.load("run-sequential-001")), 1)
+
+
+    def test_torn_unterminated_result_tail_preserves_committed_intent(self):
+        operation_flow = FlowDefinition(
+            "torn-result-tail", 1, "publish",
+            (
+                FlowNode(
+                    "publish", FlowNodeKind.OPERATION, "deploy.publish", "done",
+                    effect=OperationEffect.NON_REPEATABLE,
+                ),
+                FlowNode("done", FlowNodeKind.END),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = JsonlFlowJournal(tmp)
+            flow = PersistentFlow.start(
+                operation_flow, "run-torn-tail-001", journal
+            )
+            flow.begin_operation(
+                operation_index=0,
+                operation_ref="deploy.publish",
+                effect=OperationEffect.NON_REPEATABLE,
+                idempotency_key=flow.operation_scope_key,
+                attempt=1,
+                input_sha256="b" * 64,
+                harness_id="test-harness", harness_version="1",
+                environment_id="linux-test", context_id="repo-test",
+            )
+            pending = flow.snapshot.pending_operation
+            self.assertIsNotNone(pending)
+
+            # Model termination during the result append, before its newline
+            # commit delimiter. The durable intent must remain untouched.
+            torn_result = FlowEvent(
+                run_id="run-torn-tail-001",
+                sequence=flow.snapshot.last_event_sequence + 1,
+                event_id="torn-result-event",
+                kind=FlowEventKind.OPERATION_SUCCEEDED,
+                node_id="publish",
+                payload=(
+                    ("$op.index", "0"),
+                    ("$op.idempotency_key", pending.idempotency_key),
+                    ("$meta.duration_ms", "1.0"),
+                ),
+            )
+            journal_path = Path(tmp) / "run-torn-tail-001.jsonl"
+            with journal_path.open("ab") as handle:
+                handle.write(torn_result.to_json().encode("utf-8"))
+
+            events = journal.load("run-torn-tail-001")
+            self.assertEqual(
+                [event.kind for event in events],
+                [FlowEventKind.STARTED, FlowEventKind.OPERATION_INTENT],
+            )
+            restored = PersistentFlow.restore(
+                operation_flow, "run-torn-tail-001", JsonlFlowJournal(tmp)
+            )
+            self.assertEqual(restored.snapshot.status, FlowStatus.RUNNING)
+            self.assertIsNotNone(restored.snapshot.pending_operation)
+            self.assertEqual(restored.snapshot.pending_operation.idempotency_key,
+                             pending.idempotency_key)
+
+    def test_newline_terminated_corrupt_record_is_not_silently_repaired(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = JsonlFlowJournal(tmp)
+            PersistentFlow.start(definition(), "run-corrupt-tail-001", journal)
+            journal_path = Path(tmp) / "run-corrupt-tail-001.jsonl"
+            with journal_path.open("ab") as handle:
+                handle.write(b"not-json\n")
+            with self.assertRaisesRegex(ValueError, "corrupt flow journal"):
+                journal.load("run-corrupt-tail-001")
+
+    def test_operation_intent_requires_boolean_idempotency_contract(self):
+        flow_def = FlowDefinition(
+            "intent-bool", 1, "send",
+            (
+                FlowNode(
+                    "send", FlowNodeKind.OPERATION, "orders.submit", "done",
+                    effect=OperationEffect.DEDUPLICATED,
+                    idempotency_key_supported=True,
+                ),
+                FlowNode("done", FlowNodeKind.END),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            flow = PersistentFlow.start(flow_def, "run-intent-bool-001", JsonlFlowJournal(tmp))
+            with self.assertRaisesRegex(ValueError, "must be a boolean"):
+                flow.begin_operation(
+                    operation_index=0, operation_ref="orders.submit",
+                    effect=OperationEffect.DEDUPLICATED,
+                    idempotency_key="key-1", attempt=1,
+                    input_sha256="a" * 64,
+                    idempotency_key_supported="false",
+                    harness_id="test-harness", harness_version="1",
+                    environment_id="linux-test", context_id="repo-test",
+                )
+            self.assertIsNone(flow.snapshot.pending_operation)
+            self.assertEqual(len(flow.journal.load("run-intent-bool-001")), 1)
+
+    def test_reconciliation_rejects_truthy_non_boolean_applied_values(self):
+        flow_def = FlowDefinition(
+            "reconcile-bool", 1, "send",
+            (
+                FlowNode(
+                    "send", FlowNodeKind.OPERATION, "orders.submit", "done",
+                    effect=OperationEffect.NON_REPEATABLE,
+                ),
+                FlowNode("done", FlowNodeKind.END),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            flow = PersistentFlow.start(flow_def, "run-reconcile-bool-001", JsonlFlowJournal(tmp))
+            flow.begin_operation(
+                operation_index=0, operation_ref="orders.submit",
+                effect=OperationEffect.NON_REPEATABLE,
+                idempotency_key=flow.operation_scope_key, attempt=1,
+                input_sha256="b" * 64,
+                harness_id="test-harness", harness_version="1",
+                environment_id="linux-test", context_id="repo-test",
+            )
+            flow.mark_operation_outcome_unknown("lost-ack")
+            with self.assertRaisesRegex(ValueError, "applied must be a boolean"):
+                flow.reconcile_pending_operation(
+                    applied="false", evidence_ref="provider:lookup",
+                    reconciled_by="operator:verified",
+                )
+            self.assertEqual(flow.snapshot.status, FlowStatus.NEEDS_ATTENTION)
+            self.assertIsNotNone(flow.snapshot.pending_operation)
 
     def test_retry_preserves_idempotency_key_and_failure_branch(self):
         flow_def = definition()
@@ -140,6 +320,40 @@ class PersistentFlowTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             FlowNode("send", FlowNodeKind.OPERATION, "email.send", "done",
                      max_attempts=2, effect=OperationEffect.DEDUPLICATED)
+
+    def test_journal_truncates_only_an_unterminated_final_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = JsonlFlowJournal(tmp)
+            flow = PersistentFlow.start(definition(), "run-torn-001", journal)
+            path = journal._path("run-torn-001")
+            with path.open("ab") as handle:
+                handle.write(b'{"run_id":"run-torn-001","sequence":2')
+                handle.flush()
+
+            restored = PersistentFlow.restore(
+                definition(), "run-torn-001", JsonlFlowJournal(tmp)
+            )
+            self.assertEqual(restored.snapshot.last_event_sequence, 1)
+            self.assertEqual(len(JsonlFlowJournal(tmp).load("run-torn-001")), 1)
+            self.assertTrue(path.read_bytes().endswith(b"\n"))
+            restored.fail_step("retry-after-torn-uncommitted-append")
+            self.assertEqual(
+                [event.sequence for event in JsonlFlowJournal(tmp).load("run-torn-001")],
+                [1, 2],
+            )
+
+    def test_journal_does_not_silently_repair_newline_terminated_corruption(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = JsonlFlowJournal(tmp)
+            PersistentFlow.start(definition(), "run-corrupt-001", journal)
+            path = journal._path("run-corrupt-001")
+            with path.open("ab") as handle:
+                handle.write(b"{corrupt}\n")
+                handle.flush()
+            before = path.read_bytes()
+            with self.assertRaisesRegex(ValueError, "corrupt flow journal"):
+                journal.load("run-corrupt-001")
+            self.assertEqual(path.read_bytes(), before)
 
     def test_journal_rejects_sequence_gap(self):
         with tempfile.TemporaryDirectory() as tmp:

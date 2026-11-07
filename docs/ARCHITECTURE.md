@@ -53,7 +53,13 @@ Mutable run instance pinned to one flow-definition version. Stores its run ID, c
 
 ### Flow Journal and Checkpoint Store
 
-Append-only events plus snapshots/checkpoints. Replay reconstructs control state; it must not repeat external operations already recorded as committed. The store abstraction must support transactional sequence checks or equivalent single-writer guarantees.
+Append-only events plus snapshots/checkpoints. The current local JSONL implementation uses a single-writer-per-run contract, complete-write loops, fsync of each event and POSIX parent-directory fsync on first run-file creation.
+
+Provider operations are recorded as individual intent/result pairs. The intent includes a stable idempotency key, operation index, attempt, input digest, and pinned harness/environment/context identity; it is fsynced before adapter invocation. A successful result records outputs and cost observations as a durable checkpoint. A flow node cannot complete while an operation intent remains pending. Multi-operation habits commit every step separately and resume after the last completed checkpoint.
+
+Recovery behavior depends on the operation contract. READ_ONLY and IDEMPOTENT effects may be reissued. DEDUPLICATED effects may be reissued only if the actual adapter/provider durably enforces the supplied key. Pending NON_REPEATABLE or COMPENSATABLE effects stop for reconciliation. Node-visit-scoped keys prevent a later loop visit being confused with an earlier visit.
+
+Recovery rejects a pending intent if the active harness/environment/context identity differs from the one that created it. The journal truncates an unterminated final record while preserving earlier committed records, and refuses to repair newline-terminated corruption. This local journal cannot atomically commit with arbitrary remote providers. It does not establish exactly-once external effects, distributed multi-writer safety, or power-loss safety across all target filesystems. The loader truncates only an unterminated final append tail; newline-terminated corrupt records remain errors. The declared harness version is not yet an independently measured adapter build digest. See [OPERATION_CHECKPOINTS_AND_RECOVERY.md](OPERATION_CHECKPOINTS_AND_RECOVERY.md).
 
 ### Evidence and provenance
 
@@ -70,11 +76,14 @@ Candidate generation is not activation. An active habit must satisfy its context
 ## Persistent execution semantics
 
 - Definitions are immutable/versioned; active runs pin their definition version.
-- Checkpoint a side-effecting operation before advancing the cursor.
-- An in-flight external operation may have completed even if the worker lost its response.
-- Retries use operation-specific idempotency, deduplication or compensation rules.
-- Never promise exactly-once effects from a durable journal alone.
+- Commit an operation intent before any provider call and a separate result checkpoint before advancing the operation cursor.
+- An in-flight external operation may have completed even if the worker lost its response or its result checkpoint failed.
+- Recovery may replay only effects whose read-only/idempotent/deduplication contract makes replay safe; reuse the same idempotency key for the same node visit and logical operation.
+- A pending non-repeatable or compensatable operation requires evidence-backed reconciliation; do not infer non-execution from the lack of a result event.
+- Later loop visits to the same flow node receive a new operation scope.
+- Never promise exactly-once effects from a local durable journal alone.
 - Store external observations, time, random outcomes and model/tool responses needed for deterministic replay.
+- Pin pending operation recovery to a stable harness ID/version and environment/context; provider adapters must change their declared version when behavior or implementation changes.
 - If safe continuation cannot be established, move the run to `NEEDS_ATTENTION` rather than guessing or retrying indefinitely.
 
 ## Core invariants
