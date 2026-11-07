@@ -6,7 +6,7 @@
 **PR #4 hand-design branch head:** `8facb898fa7734978dd6b9e0bd2ee934688c7d9e` (draft)  
 **Retrospective adaptation protocol:** PR #6 draft at `98df6c0b461441afa5e8be395db5c25e43e45896` (based on PR #4).
 **Research extension:** PR #7 draft at `cb02fea3b681779b8b545762914cb82b765ff3af` (based on PR #6).
-**Durability implementation:** PR [#8](https://github.com/Loofy147/HabitRoute/pull/8), draft head `afc0be7303cd0ff105cf11455ac90b087cf4fe26`, based on PR #7.  
+**Durability implementation:** PR [#8](https://github.com/Loofy147/HabitRoute/pull/8), draft head `11f37572a18776d023928ad0585d0e160f18b85b`, based on PR #7.  
 **Package:** `habitroute` 0.1.0.dev0 (experimental; not a stable production runtime)
 
 ## Canonical machine-habit core
@@ -108,7 +108,7 @@ Fault-injection tests cover failure before intent append, process termination af
 
 **Boundary:** these are local journal and simulated-adapter guarantees. No production adapter exists. The local journal cannot atomically commit with an arbitrary provider, and the core reconciliation method does not authenticate the supplied `reconciled_by` identity or validate provider evidence. Harness ID/version/environment/context are declarations, not an immutable adapter build digest. HR-02 remains critical; see HR-14 and HR-15.
 
-Final PR #8 CI run [42318545062](https://github.com/Loofy147/HabitRoute/actions/runs/42318545062) passed 10 legacy experiment tests, 123 core/contract tests and 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (146 tests per version). This run corresponds to PR #8 head `afc0be7303cd0ff105cf11455ac90b087cf4fe26`.
+Latest PR #8 full matrix run [42318850901](https://github.com/Loofy147/HabitRoute/actions/runs/42318850901) passed 10 legacy experiment tests, 124 core/contract tests and 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (147 tests per version). This run corresponds to PR #8 head `075f93475b28d0e3571ce212a17ea40ae8557523`; a later documentation-only head is under CI.
 
 See [OPERATION_CHECKPOINTS_AND_RECOVERY.md](OPERATION_CHECKPOINTS_AND_RECOVERY.md) for the protocol, recovery matrix, test evidence and limits.
 
@@ -120,7 +120,7 @@ See [OPERATION_CHECKPOINTS_AND_RECOVERY.md](OPERATION_CHECKPOINTS_AND_RECOVERY.m
 - PR #6 run [42313250815](https://github.com/Loofy147/HabitRoute/actions/runs/42313250815) passed **104 tests on each of Python 3.11, 3.12 and 3.13**.
 - CI installs `jsonschema>=4.23,<5` for schema/contract tests; HabitRoute's runtime dependency list remains empty.
 - PR #7 run [42315937577](https://github.com/Loofy147/HabitRoute/actions/runs/42315937577) passed 10 legacy experiment tests + 108 core/contract tests + 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (131 per version).
-- PR #8 run [42318545062](https://github.com/Loofy147/HabitRoute/actions/runs/42318545062) passed 10 legacy experiment tests + 123 core/contract tests + 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (146 per version).
+- PR #8 run [42318850901](https://github.com/Loofy147/HabitRoute/actions/runs/42318850901) passed 10 legacy experiment tests + 124 core/contract tests + 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (147 per version).
 - PR #4 remains a draft against `docs/unified-runtime-foundation`; PR #6 remains a draft against the PR #4 branch; PR #7 remains a draft against PR #6's branch. None is merged into main.
 - Historical 77/77 count applies to commit `090fc7c3fddbc95c7b128045fa7a20ab3dd63400`, not the current tested branch.
 - Legacy simulator tests remain under `experiments/step_savings_v1/`.
@@ -130,8 +130,7 @@ See [OPERATION_CHECKPOINTS_AND_RECOVERY.md](OPERATION_CHECKPOINTS_AND_RECOVERY.m
 - No production adapter invokes external APIs, CLIs, repositories, scripts or agent runtimes.
 - No production-grade provider enforcement for credentials, egress, hard resource/time budgets, cancellation or output limits.
 - No actual provider-specific idempotency-key conformance proof or lookup/reconciliation adapter.
-- No independently measured adapter implementation/build/configuration fingerprint beyond declared harness ID/version and environment/context values.
-- No independently measured adapter implementation/build fingerprint beyond declared harness ID/version and environment/context values; adapters must version implementation changes honestly until a stronger fingerprint contract exists.
+- No independently measured adapter implementation/build/configuration fingerprint beyond declared harness ID/version and environment/context values; adapters must increment the declared version when behavior or implementation changes until a stronger fingerprint contract exists.
 - No authenticated reconciliation service; the current core method only records caller-supplied actor and evidence-reference strings.
 - No multi-worker/multi-host execution; JSONL remains single-writer-per-run.
 - No transactional coordination between external operations and the local flow journal; an ambiguous provider outcome still requires idempotency or reconciliation.
