@@ -22,7 +22,7 @@
 
 ## What PR #8 establishes
 
-The current draft head `455c31f20ed198b70cd4696b983d562558dfc39d` passed [CI run 42317958263](https://github.com/Loofy147/HabitRoute/actions/runs/42317958263): 138 tests on each of Python 3.11, 3.12 and 3.13. This is local deterministic test evidence, not production-provider evidence.
+The current draft head `afc0be7303cd0ff105cf11455ac90b087cf4fe26` passed [CI run 42318545062](https://github.com/Loofy147/HabitRoute/actions/runs/42318545062): 146 tests on each of Python 3.11, 3.12 and 3.13. This is local deterministic test evidence, not production-provider evidence.
 
 The worker now follows this local sequence for each provider operation:
 
@@ -40,7 +40,7 @@ Recovery behavior is conservative:
 - `NON_REPEATABLE` and `COMPENSATABLE` pending operations are not automatically reissued. They move to `NEEDS_ATTENTION` and require explicit reconciliation.
 - Confirming an operation as applied records an evidence reference and resumes from its checkpoint. Confirming it was not applied clears the pending intent but leaves the flow in `NEEDS_ATTENTION`; it does not automatically retry.
 
-Crash tests cover failure before the intent append, process termination after a provider effect but before acknowledgement, result-checkpoint write failure, provider-side deduplicated retry with a stable key, completed-prefix recovery, and the no-auto-retry result of a not-applied reconciliation.
+Crash tests cover failure before the intent append, process termination after a provider effect but before acknowledgement, result-checkpoint write failure, provider-side deduplicated retry with a stable key, completed-prefix recovery, the no-auto-retry result of a not-applied reconciliation, cross-harness/environment replay refusal, torn unterminated-tail preservation and newline-terminated corruption refusal.
 
 ## Stop conditions
 
