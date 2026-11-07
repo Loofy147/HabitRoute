@@ -1,6 +1,6 @@
 # Operation Checkpoints and Recovery Contract
 
-**Status:** implemented in draft PR #8 at head `455c31f20ed198b70cd4696b983d562558dfc39d`; CI run [42317958263](https://github.com/Loofy147/HabitRoute/actions/runs/42317958263) passed 138 tests per Python version. This is a provider-independent local protocol with deterministic fault-injection tests, not a claim of exactly-once execution or a production provider integration.
+**Status:** implemented in draft PR #8; latest verified code/test run [42318545062](https://github.com/Loofy147/HabitRoute/actions/runs/42318545062) passed 146 tests per Python version (3.11, 3.12 and 3.13). This is a provider-independent local protocol with deterministic fault-injection tests, not a claim of exactly-once execution or a production provider integration.
 
 ## 1. Purpose
 
@@ -20,11 +20,12 @@ The intent includes:
 - operation reference and declared effect class;
 - idempotency key and attempt number;
 - SHA-256 digest of canonicalized operation inputs;
+- harness ID and version plus environment and context IDs at invocation time;
 - whether the adapter contract claims provider idempotency-key support.
 
 The intent is appended and fsynced before the adapter is called. On POSIX, the journal also fsyncs its parent directory when first creating the run file. The event does not persist the raw resolved input mapping; it persists a digest. Existing flow context and successful operation outputs are still journaled as flow state.
 
-A successful operation event persists outputs and observed duration, resource units and external cost. It becomes a completed-operation checkpoint in the reducer. A multi-operation habit commits one result per operation. Its final flow-node success event is separate and is committed only after all operation checkpoints and postconditions are satisfied.
+A successful operation event persists outputs, observed duration/resource units/external cost and the same harness/environment scope. It becomes a completed-operation checkpoint in the reducer. The scope is checked before a pending operation is replayed; a changed harness ID/version or environment/context stops recovery for review rather than invoking a different implementation. A multi-operation habit commits one result per operation. Its final flow-node success event is separate and is committed only after all operation checkpoints and postconditions are satisfied.
 
 The reducer rejects a result that does not match the pending operation index and idempotency key. It rejects a new intent while another intent is pending, when the attempt number is not the next expected attempt, or when its index skips the next sequential operation. A flow node cannot be completed or failed while an operation intent remains pending. A flow with a pending external operation also cannot be cancelled until that operation has been reconciled; cancellation must not discard the only recovery handle for an ambiguous side effect.
 
@@ -33,6 +34,7 @@ The reducer rejects a result that does not match the pending operation index and
 | Journal state after restart | Effect class | Recovery behavior |
 |---|---|---|
 | No intent for the next operation | Any currently authorized effect | Create and fsync a new intent before invocation. |
+| Intent pending, no result event | Any | First require the current harness ID/version and environment/context to match the committed intent. A mismatch remains in NEEDS_ATTENTION and is not replayed. |
 | Intent pending, no result event | READ_ONLY | Re-invoke; the effect is defined as having no external mutation. |
 | Intent pending, no result event | IDEMPOTENT | Re-invoke with the same key and unchanged input digest. This relies on the operation genuinely being idempotent. |
 | Intent pending, no result event | DEDUPLICATED | Re-invoke with the same key only when the actual provider durably deduplicates by that key. The code's boolean declaration is not independent proof. |
@@ -69,6 +71,8 @@ The test suite now exercises:
 - applied reconciliation: the operation is recorded complete and the worker continues without replay;
 - not-applied reconciliation: the flow remains in NEEDS_ATTENTION and does not retry automatically;
 - node-loop visit: retry retains its key while a later visit to the same node gets a different key;
+- harness-version and environment drift: an otherwise idempotent pending operation is not replayed through a different harness version or environment;
+- torn final append: an unterminated final JSONL record is truncated to the last newline-delimited event; a newline-terminated malformed record is retained and raises corruption;
 - cancellation with an unresolved intent is refused so the flow remains reconcilable;
 - an out-of-order operation index is rejected by the reducer.
 
@@ -84,6 +88,8 @@ The provider deduplication test is a simulated adapter contract. It does not pro
 - A checkpointed prefix of a multi-operation habit is skipped after recovery.
 - A failed local result append leaves the previously committed intent available for recovery.
 - Operation attempts and idempotency identity are derived from the event history and replay deterministically in the tested local journal.
+- Pending operations are bound to the harness ID/version and environment/context committed in the intent.
+- An unterminated final journal line is treated as an uncommitted append and truncated on load; newline-terminated corrupt data is not silently repaired.
 - An unresolved operation cannot be hidden by a terminal cancellation event; a skipped operation index cannot enter the checkpoint history.
 
 ### Not established
@@ -93,12 +99,13 @@ The provider deduplication test is a simulated adapter contract. It does not pro
 - That an adapter's `idempotency_key_supported=True` claim is true; it must be validated provider by provider.
 - Correctness of an operator's reconciliation decision or evidence reference.
 - Multi-process/multi-host writers for a run; JSONL retains single-writer-per-run semantics.
-- Robust recovery from arbitrary media corruption, torn final records, filesystem/controller failure, disk-full conditions after partial append, or power loss on every supported platform.
+- Robust recovery from newline-terminated corruption, arbitrary media corruption, filesystem/controller failure, disk-full conditions after partial append, or power loss on every supported platform. The tested torn-tail repair is limited to a final record without its newline delimiter.
+- Detection of adapter implementation changes when a provider reuses the same declared harness ID/version; adapters must version their implementation honestly, and a future immutable implementation fingerprint is still needed for stronger provenance.
 - Durable HabitRegistry, snapshot compaction, distributed leases, production authentication/approval service, or provider-side reconciliation adapter.
 
 ## 8. Remaining implementation gates
 
-1. Run crash and replay tests on target filesystems and add explicit malformed/truncated-tail handling without discarding a potentially committed intent.
+1. Run crash and replay tests on target filesystems; validate torn-tail repair, directory/file fsync semantics and corruption handling under actual power-loss/filesystem failure.
 2. Implement a real provider adapter with a verified idempotency/reconciliation contract and deny-path tests.
 3. Put reconciliation behind an authenticated approval boundary and bind each decision to immutable provider evidence.
 4. Add a durable transactional store/lease before multi-worker or multi-host use.
