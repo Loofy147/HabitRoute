@@ -66,6 +66,8 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 - [x] Prove that a completed multi-operation prefix is skipped after recovery and that a pending non-repeatable effect is not reissued.
 - [x] Reject cancellation while an operation outcome is unresolved; require reconciliation first.
 - [x] Reject out-of-order or skipped operation checkpoint indices in the event reducer.
+- [x] Reject pending-operation replay when the declared harness ID/version or environment/context differs from the committed intent.
+- [x] Truncate only an unterminated final JSONL append tail; preserve and reject newline-terminated corrupt records.
 - [x] Pin pending operation intents to harness and environment/context identity; fail closed on drift during recovery.
 - [x] Test truncation of an unterminated trailing event while preserving a prior committed intent; reject newline-terminated corrupt records.
 - [ ] Validate recovery against actual provider idempotency/deduplication and reconciliation contracts.
@@ -77,7 +79,7 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 - [x] Define provider-neutral HarnessAdapter protocol and typed operation outcomes.
 - [x] Add contract-level allowlist, approval and attempt checks.
 - [ ] Add actual provider-backed credential boundaries, egress controls, hard budgets, timeouts, cancellation and output limits.
-- [ ] Add independent environment/capability fingerprinting.
+- [ ] Add an independently measured adapter/build/capability fingerprint; current intent pins only declared harness ID/version and environment/context IDs.
 - [ ] Verify durable idempotency/deduplication or authoritative lookup/reconciliation for a real provider adapter; local simulation is insufficient.
 - [ ] Put reconciliation behind authenticated operator authorization and immutable evidence binding.
 - [ ] Implement and test compensation before enabling compensatable operations.
