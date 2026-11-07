@@ -80,6 +80,8 @@ class PersistentFlowTests(unittest.TestCase):
                     idempotency_key=f"{flow.operation_scope_key}:habit:1",
                     attempt=1,
                     input_sha256="a" * 64,
+                    harness_id="test-harness", harness_version="1",
+                    environment_id="linux-test", context_id="repo-test",
                 )
             self.assertEqual(len(flow.snapshot.completed_operations), 0)
             self.assertEqual(flow.snapshot.operation_attempt_count(0), 0)
@@ -110,6 +112,8 @@ class PersistentFlowTests(unittest.TestCase):
                 idempotency_key=flow.operation_scope_key,
                 attempt=1,
                 input_sha256="b" * 64,
+                harness_id="test-harness", harness_version="1",
+                environment_id="linux-test", context_id="repo-test",
             )
             pending = flow.snapshot.pending_operation
             self.assertIsNotNone(pending)
@@ -176,6 +180,8 @@ class PersistentFlowTests(unittest.TestCase):
                     idempotency_key="key-1", attempt=1,
                     input_sha256="a" * 64,
                     idempotency_key_supported="false",
+                    harness_id="test-harness", harness_version="1",
+                    environment_id="linux-test", context_id="repo-test",
                 )
             self.assertIsNone(flow.snapshot.pending_operation)
             self.assertEqual(len(flow.journal.load("run-intent-bool-001")), 1)
@@ -198,6 +204,8 @@ class PersistentFlowTests(unittest.TestCase):
                 effect=OperationEffect.NON_REPEATABLE,
                 idempotency_key=flow.operation_scope_key, attempt=1,
                 input_sha256="b" * 64,
+                harness_id="test-harness", harness_version="1",
+                environment_id="linux-test", context_id="repo-test",
             )
             flow.mark_operation_outcome_unknown("lost-ack")
             with self.assertRaisesRegex(ValueError, "applied must be a boolean"):
