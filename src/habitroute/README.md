@@ -12,7 +12,7 @@ Canonical code is organized around **Machine Habits**, **Execution Harnesses** a
 
 Compensatable operations currently fail closed: a compensation adapter is not implemented. Unknown side-effect outcomes return `NEEDS_ATTENTION`.
 
-PR #8's latest full CI run [42318545062](https://github.com/Loofy147/HabitRoute/actions/runs/42318545062) passed 123 core/contract tests on each of Python 3.11, 3.12 and 3.13; the same matrix also passed 10 legacy experiment and 13 paired-evaluation tests per version.
+PR #8's latest full CI run [42318850901](https://github.com/Loofy147/HabitRoute/actions/runs/42318850901) passed 124 core/contract tests on each of Python 3.11, 3.12 and 3.13; the same matrix also passed 10 legacy experiment and 13 paired-evaluation tests per version (147 total per version).
 
 ## Harnesses
 
@@ -24,7 +24,7 @@ PR #8's latest full CI run [42318545062](https://github.com/Loofy147/HabitRoute/
 
 Recovery uses `PersistentFlow.restore(...)` to replay the event history, including pending operation intents and completed operation checkpoints. The instance method `resume()` changes a paused flow back to its saved running/waiting state.
 
-The worker checkpoints each operation inside a multi-operation habit. After restart, it skips the committed prefix. A pending READ_ONLY/IDEMPOTENT operation can be replayed; a DEDUPLICATED operation can be replayed only when the real provider durably enforces the supplied key. Pending NON_REPEATABLE/COMPENSATABLE operations stop for reconciliation. A pending operation is not replayed under a changed harness version or environment/context. Pending intents are pinned to harness and environment/context identity, and a changed profile stops recovery. The journal truncates only an unterminated trailing record; newline-terminated corruption is rejected.
+The worker checkpoints each operation inside a multi-operation habit. After restart, it skips the committed prefix. A pending READ_ONLY/IDEMPOTENT operation can be replayed; a DEDUPLICATED operation can be replayed only when the real provider durably enforces the supplied key. Pending NON_REPEATABLE/COMPENSATABLE operations stop for reconciliation. A pending operation is not replayed under a changed harness version or environment/context. Pending intents are pinned to harness and environment/context identity, and a changed profile stops recovery. The harness version is a declared identifier, not an independently measured build/configuration digest; adapter owners must increment it when the implementation or behavior changes. The journal truncates only an unterminated trailing record; newline-terminated corruption is rejected.
 
 ~~~python
 from habitroute.flows import PersistentFlow, JsonlFlowJournal
