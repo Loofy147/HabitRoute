@@ -1,6 +1,6 @@
 # Operation Checkpoints and Recovery Contract
 
-**Status:** implemented in draft PR #8; latest verified code/test run [42318629102](https://github.com/Loofy147/HabitRoute/actions/runs/42318629102) passed 147 tests per Python version (3.11, 3.12 and 3.13). This is a provider-independent local protocol with deterministic fault-injection tests, not a claim of exactly-once execution or a production provider integration.
+**Status:** implemented in draft PR #8; latest full matrix run [42318850901](https://github.com/Loofy147/HabitRoute/actions/runs/42318850901) passed 147 tests per Python version (3.11, 3.12 and 3.13). This is a provider-independent local protocol with deterministic fault-injection tests, not a claim of exactly-once execution or a production provider integration.
 
 ## 1. Purpose
 
