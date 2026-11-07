@@ -8,6 +8,7 @@ D = "a" * 64
 B = "b" * 64
 C = "c" * 64
 E = "e" * 64
+A = "d" * 64
 
 
 def make_trial(
@@ -40,9 +41,6 @@ def make_trial(
         trace_complete=trace_complete, constraint_violations=violations,
         unrelated_work_count=unrelated, costs=costs,
     )
-
-
-A = "d" * 64
 
 
 class PairedEvaluationTests(unittest.TestCase):
