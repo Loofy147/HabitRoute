@@ -376,6 +376,10 @@ class DurableOperationCheckpointTests(unittest.TestCase):
                 idempotency_key=flow.operation_scope_key,
                 attempt=1,
                 input_sha256="a" * 64,
+                harness_id=profile.harness_id,
+                harness_version=profile.version,
+                environment_id=profile.environment_id,
+                context_id=profile.context_id,
             )
             last_sequence = flow.snapshot.last_event_sequence
             with self.assertRaisesRegex(ValueError, "unresolved external operation"):
