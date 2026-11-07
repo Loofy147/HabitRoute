@@ -4,7 +4,7 @@
 
 | ID | Severity | Status | Risk | Required closure evidence |
 |---|---|---|---|---|
-| HR-01 | High | PARTIALLY CLOSED IN PR #8 | Local flow runs persist per-operation intents and results; crash paths, sequential-index validation and unresolved-operation cancellation refusal are covered with a deterministic adapter. Production durability across all supported storage filesystems and provider implementations is not yet established. | Full crash matrix on target filesystems; corruption/torn-write recovery; crash after each event transition; replay equivalence; external adapter tests. |
+| HR-01 | High | PARTIALLY CLOSED IN PR #8 | Local flow runs persist per-operation intents/results; the loader truncates only an unterminated final record and rejects newline-terminated corruption. Production durability across all supported filesystems and providers is not established. | Full crash matrix on target filesystems; file/directory fsync and power-loss validation; broader corruption handling; crash after each transition; replay equivalence; external adapter tests. |
 | HR-02 | Critical | OPEN | A local JSONL journal cannot be atomically committed with an arbitrary remote provider effect. A pending intent can represent either "provider never received it" or "provider applied it and acknowledgement was lost." | Provider-specific idempotency/deduplication contract or authoritative lookup/reconciliation; adapter conformance tests for lost acknowledgements, duplicate delivery and stable-key behavior. |
 | HR-03 | High | OPEN | EfficiencyGate accepts caller-supplied aggregate profiles. | Raw paired trial ledger, exact matched case IDs, independent verifier and mutation-tested promotion gate. |
 | HR-04 | High | PARTIALLY OPEN | Per-operation duration/resource/external-cost observations are now checkpointed. Total cost propagation across provider tokens, context assembly, compute, memory and human recovery is still incomplete. | Typed per-step/flow/context cost vector, explicit unknown/missing values and aggregation tests. |
@@ -22,7 +22,7 @@
 
 ## What PR #8 establishes
 
-The current draft head `afc0be7303cd0ff105cf11455ac90b087cf4fe26` passed [CI run 42318545062](https://github.com/Loofy147/HabitRoute/actions/runs/42318545062): 146 tests on each of Python 3.11, 3.12 and 3.13. This is local deterministic test evidence, not production-provider evidence.
+The latest verified code/test run [42318629102](https://github.com/Loofy147/HabitRoute/actions/runs/42318629102) passed 10 legacy experiment tests, 124 core/contract tests and 13 paired-evaluation tests (147 per version) on Python 3.11, 3.12 and 3.13. This is local deterministic test evidence, not production-provider evidence.
 
 The worker now follows this local sequence for each provider operation:
 
