@@ -353,11 +353,11 @@ class JsonlFlowJournal:
             return False
         with path.open("rb") as handle:
             handle.seek(-1, os.SEEK_END)
-            if handle.read(1) == b"\\n":
+            if handle.read(1) == b"\n":
                 return False
             handle.seek(0)
             raw = handle.read()
-        last_delimiter = raw.rfind(b"\\n")
+        last_delimiter = raw.rfind(b"\n")
         valid_length = last_delimiter + 1
         fd = os.open(path, os.O_WRONLY)
         try:
