@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from enum import Enum
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -249,7 +250,9 @@ class OperationCheckpoint:
             raise ValueError("checkpoint input_sha256 must be a SHA-256 hex digest")
         for name in ("duration_ms", "resource_units", "external_cost"):
             value = getattr(self, name)
-            if value is not None and (not isinstance(value, (int, float)) or value < 0):
+            if value is not None and (
+                not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0
+            ):
                 raise ValueError(f"{name} must be non-negative or None")
 
 
@@ -370,7 +373,8 @@ def _settle_at_node(
     definition: FlowDefinition, snapshot: FlowSnapshot, node_id: str,
 ) -> FlowSnapshot:
     node = definition.node(node_id)
-    reset_operation_state = node_id != snapshot.current_node
+    # Every settlement begins a new node visit, including explicit self-loops.
+    reset_operation_state = True
     operation_state = (
         {
             "pending_operation": None,
@@ -454,7 +458,10 @@ def apply_flow_event(
         return snapshot
     if event.sequence != snapshot.last_event_sequence + 1:
         raise ValueError("flow event sequence is not contiguous")
-    if snapshot.status in _TERMINAL:
+    if snapshot.status in _TERMINAL and not (
+        snapshot.status is FlowStatus.NEEDS_ATTENTION
+        and event.kind is FlowEventKind.OPERATION_RECONCILED
+    ):
         raise ValueError("cannot apply new events to a terminal flow")
     payload = dict(event.payload)
     updated = snapshot
