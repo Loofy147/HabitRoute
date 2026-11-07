@@ -109,9 +109,9 @@ class CostSummary:
     measurement_kind: str
     paired_samples: int
     missing_pairs: int
-    baseline_mean: float
-    adapted_mean: float
-    adapted_minus_baseline: float
+    baseline_mean: float | None
+    adapted_mean: float | None
+    adapted_minus_baseline: float | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,12 +301,13 @@ def evaluate_pairs(
         CostSummary(
             metric=key[0], unit=key[1], measurement_kind=key[2],
             paired_samples=len(values[0]), missing_pairs=n - len(values[0]),
-            baseline_mean=_mean(values[0]),
-            adapted_mean=_mean(values[1]),
-            adapted_minus_baseline=_mean(values[1]) - _mean(values[0]),
+            baseline_mean=_mean(values[0]) if values[0] else None,
+            adapted_mean=_mean(values[1]) if values[1] else None,
+            adapted_minus_baseline=(
+                _mean(values[1]) - _mean(values[0]) if values[0] else None
+            ),
         )
         for key, values in sorted(cost_values.items())
-        if values[0]
     )
 
     return EvaluationSummary(
