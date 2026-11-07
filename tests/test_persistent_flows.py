@@ -36,6 +36,25 @@ class PersistentFlowTests(unittest.TestCase):
             self.assertEqual(flow.current_node.node_id, "scan")
             self.assertEqual(flow.idempotency_key, "run-001:nightly-maintenance:3:scan")
 
+    def test_operation_scope_key_is_stable_for_retries_and_changes_on_node_revisit(self):
+        loop = FlowDefinition(
+            "self-loop", 1, "scan",
+            (FlowNode(
+                "scan", FlowNodeKind.OPERATION, "repo.scan", "scan",
+                max_attempts=2, effect=OperationEffect.READ_ONLY,
+            ),),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            flow = PersistentFlow.start(loop, "run-loop-001", JsonlFlowJournal(tmp))
+            first_key = flow.operation_scope_key
+            flow.fail_step("retryable")
+            self.assertEqual(flow.operation_scope_key, first_key)
+            flow.succeed_step()
+            self.assertEqual(flow.current_node.node_id, "scan")
+            self.assertEqual(flow.snapshot.node_visit_count("scan"), 2)
+            self.assertNotEqual(flow.operation_scope_key, first_key)
+            self.assertEqual(flow.snapshot.operation_attempt_count(0), 0)
+
     def test_retry_preserves_idempotency_key_and_failure_branch(self):
         flow_def = definition()
         with tempfile.TemporaryDirectory() as tmp:
