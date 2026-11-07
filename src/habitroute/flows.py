@@ -318,6 +318,11 @@ class FlowSnapshot:
         return f"{self.run_id}:{self.flow_id}:{self.definition_version}:{self.current_node}"
 
 
+def _validate_output_keys(outputs: Mapping[str, str]) -> None:
+    if any(key.startswith(("$meta.", "$op.")) for key in outputs):
+        raise ValueError("flow outputs cannot use reserved journal namespaces")
+
+
 class FlowJournal(Protocol):
     def append(self, event: FlowEvent) -> None: ...
     def load(self, run_id: str) -> tuple[FlowEvent, ...]: ...
@@ -679,6 +684,7 @@ class PersistentFlow:
         cls, definition: FlowDefinition, run_id: str, journal: FlowJournal,
         initial_context: Mapping[str, str] | None = None,
     ) -> "PersistentFlow":
+        _validate_output_keys(initial_context or {})
         initial = FlowSnapshot.initial(definition, run_id, initial_context)
         flow = cls(definition, initial, journal)
         flow._commit(FlowEventKind.STARTED, definition.start_node, initial_context or {})
@@ -748,6 +754,7 @@ class PersistentFlow:
         pending = self.snapshot.pending_operation
         if pending is None:
             raise ValueError("no pending operation to complete")
+        _validate_output_keys(outputs or {})
         payload = dict(outputs or {})
         payload.update({
             "$op.index": str(pending.operation_index),
@@ -795,6 +802,7 @@ class PersistentFlow:
             raise ValueError("no pending operation to reconcile")
         if not evidence_ref.strip() or not reconciled_by.strip():
             raise ValueError("reconciliation requires evidence_ref and reconciled_by")
+        _validate_output_keys(outputs or {})
         payload = dict(outputs or {})
         payload.update({
             "$op.index": str(pending.operation_index),
@@ -809,6 +817,7 @@ class PersistentFlow:
         self, outputs: Mapping[str, str] | None = None,
         metadata: Mapping[str, str] | None = None,
     ) -> FlowSnapshot:
+        _validate_output_keys(outputs or {})
         payload = dict(outputs or {})
         payload.update({f"$meta.{key}": value for key, value in (metadata or {}).items()})
         return self._commit(FlowEventKind.STEP_SUCCEEDED, self.snapshot.current_node, payload)
