@@ -55,6 +55,8 @@ class OperationStep:
     effect: OperationEffect = OperationEffect.READ_ONLY
     max_attempts: int = 1
     input_bindings: tuple[tuple[str, str], ...] = ()
+    # True only when the adapter/provider contract actually deduplicates calls
+    # by the supplied stable key; accepting an argument is not sufficient.
     idempotency_key_supported: bool = False
     compensation_ref: str | None = None
 
@@ -126,10 +128,17 @@ class HarnessOperationResult:
         keys = [key for key, _ in self.outputs]
         if any(not key.strip() for key in keys) or len(keys) != len(set(keys)):
             raise ValueError("harness outputs must have unique non-empty keys")
+        if any(key.startswith(("$meta.", "$op.")) for key in keys):
+            raise ValueError("harness outputs cannot use reserved flow journal namespaces")
 
 
 class HarnessAdapter(Protocol):
-    """Provider-neutral boundary for one actual machine operation."""
+    """Provider-neutral boundary for one actual machine operation.
+
+    Implementations must not claim idempotency-key support unless the external
+    provider durably deduplicates the logical operation by the supplied key.
+    The protocol itself cannot prove that provider behavior.
+    """
 
     @property
     def profile(self) -> HarnessProfile: ...
