@@ -130,6 +130,25 @@ Google SRE's canary guidance compares a small, time-limited treatment population
 
 **HabitRoute implication:** a successful offline paired test is not sufficient for indefinite activation. Any future activation should begin in shadow mode or a narrow canary with explicit stop/rollback criteria. Model, tool, schema, repository, environment or context-source changes can invalidate prior evidence. The correct response may be revalidation, quarantine or revocation rather than assuming the previous result transfers.
 
+### 3.9 Test selection, mutation testing and hermetic reproducibility
+
+Regression-test selection and prioritization are useful for reducing feedback latency, but the empirical literature does not identify a universally best technique. Results depend on application structure, change type, test suite composition, coverage signals, and the fault classes the selected tests can detect. Some reviews also identify weak experimental reproducibility and over-weighting of execution cost relative to fault detection.
+
+Mutation testing provides a complementary test-quality probe: introduce small artificial defects and verify that the tests fail for the right reason. It is not a proof that all real faults will be detected, and equivalent or unrealistic mutants can distort the score. A mutation score should not become a single optimization target.
+
+Hermetic builds make test evidence more reproducible by making tools, dependencies, configuration and other inputs explicit. Hidden environment inputs or undeclared files can make cached or repeated test results invalid. The same concern applies to agent harnesses: pinning a Git commit alone is insufficient if model, toolchain, environment variables, provider behavior, runner image, prompt/context artifacts or external services can change independently.
+
+**HabitRoute implication:**
+
+- Keep the existing complete test suite as the merge gate while the core is young and the safety/durability surface is changing.
+- If test-impact selection is introduced later, compare selected tests against the complete suite in shadow; measure time saved, fault detection, false-negative rate, and class-specific coverage before allowing it to gate changes.
+- Add property-based/state-machine checks for flow reducer invariants, event ordering, duplicate delivery, journal replay equivalence, idempotency-key stability and fail-closed authorization.
+- Use mutation cases to prove that important assertions detect deliberate violations: bypassed approvals, changed operation identity, false success, missing checkpoints, wrong pair matching, opportunity/action conflation and cost aggregation across unlike units.
+- Record a reproducibility manifest for every experiment: repository commit, Python/runtime and runner image, dependency lock/fingerprint, environment, tool/harness/model versions, prompt/context digests, provider/adapter version, test selection, seed, task cohort and evaluator digest.
+- Treat remote cache hits and deterministic test outcomes as evidence only when all material inputs are declared and fingerprinted.
+
+This suggests a testing strategy that improves diagnostic value and experiment reproducibility without replacing the full regression gate or treating test count, coverage or mutation score as proof.
+
 ## 4. Evidence ledger
 
 | Claim | Status | Evidence and limit |
@@ -143,6 +162,9 @@ Google SRE's canary guidance compares a small, time-limited treatment population
 | Replay/retry can repeat external operations; idempotency and reconciliation are necessary at provider boundaries | ESTABLISHED | Temporal and AWS durable-execution guidance |
 | Learned policy must not control its own execution authority | ESTABLISHED DESIGN REQUIREMENT | Runtime-enforcement systematic review and least-privilege architecture |
 | A HabitRoute paired evaluator improves candidate selection on real tasks | HYPOTHESIS / OPEN | Only analysis mechanics are tested in this branch |
+| A selected/impact-based regression subset preserves sufficient fault detection for HabitRoute | HYPOTHESIS / OPEN | Must be compared in shadow against the full suite; no universal selection technique exists |
+| Hermetic, fully fingerprinted test execution improves reproducibility of HabitRoute experiments | ESTABLISHED PRINCIPLE; APPLICATION OPEN | Hermetic build literature supports explicit inputs; HabitRoute still needs a complete experiment manifest |
+| Mutation testing finds important gaps in HabitRoute's contract and recovery tests | HYPOTHESIS / OPEN | Needs representative mutation operators and manual review of equivalent/unrealistic mutants |
 | Modular evolution will reduce interference in HabitRoute | HYPOTHESIS / OPEN | Requires controlled module-scope experiment |
 | CPM × HabitRoute produces additive or synergistic improvement | HYPOTHESIS / OPEN | Requires the four-condition factorial experiment |
 | Per-operation intent/result journaling plus provider reconciliation will close HabitRoute's crash windows | HYPOTHESIS / OPEN | Requires runtime design, adapter contract and crash-injection evidence |
@@ -223,6 +245,10 @@ The following is an evidence sequence, not a commitment to a particular implemen
 11. [AWS Durable Execution: Idempotency and retries](https://docs.aws.amazon.com/durable-execution/patterns/best-practices/idempotency/).
 12. Google SRE, [Canarying Releases](https://sre.google/workbook/canarying-releases/).
 13. Microsoft Research, [Patterns of Trustworthy Experimentation: During-Experiment Stage](https://www.microsoft.com/en-us/research/articles/patterns-of-trustworthy-experimentation-during-experiment-stage/).
+14. Engström, Skoglund and Runeson, [A Systematic Review on Regression Test Selection Techniques](https://doi.org/10.1016/j.infsof.2009.07.001), *Information and Software Technology*, 2010.
+15. Kazmi et al., [Effective Regression Test Case Selection: A Systematic Literature Review](https://doi.org/10.1145/3057269), *ACM Computing Surveys*, 2017; reports that only 39% of the examined studies followed experimental guidelines/reproducibility.
+16. Goran Petrovic et al., [Long Term Effects of Mutation Testing](https://research.google/pubs/long-term-effects-of-mutation-testing/), ICSE 2021.
+17. Bazel, [Hermeticity](https://bazel.build/concepts/hermeticity) and [Remote Caching](https://bazel.build/remote/caching) documentation.
 
 ---
 
