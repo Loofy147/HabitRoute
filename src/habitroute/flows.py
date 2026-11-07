@@ -770,6 +770,8 @@ class PersistentFlow:
         idempotency_key: str, attempt: int, input_sha256: str,
         idempotency_key_supported: bool = False,
     ) -> FlowSnapshot:
+        if type(idempotency_key_supported) is not bool:
+            raise ValueError("idempotency_key_supported must be a boolean")
         payload = {
             "$op.index": str(operation_index),
             "$op.operation_ref": operation_ref,
@@ -834,8 +836,12 @@ class PersistentFlow:
         pending = self.snapshot.pending_operation
         if pending is None:
             raise ValueError("no pending operation to reconcile")
-        if not evidence_ref.strip() or not reconciled_by.strip():
-            raise ValueError("reconciliation requires evidence_ref and reconciled_by")
+        if type(applied) is not bool:
+            raise ValueError("applied must be a boolean")
+        if not isinstance(evidence_ref, str) or not evidence_ref.strip():
+            raise ValueError("reconciliation evidence_ref must be a non-empty string")
+        if not isinstance(reconciled_by, str) or not reconciled_by.strip():
+            raise ValueError("reconciliation reconciled_by must be a non-empty string")
         _validate_output_keys(outputs or {})
         payload = dict(outputs or {})
         payload.update({
