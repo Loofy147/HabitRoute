@@ -21,7 +21,8 @@ The intent includes:
 - idempotency key and attempt number;
 - SHA-256 digest of canonicalized operation inputs;
 - harness ID and version plus environment and context IDs at invocation time;
-- whether the adapter contract claims provider idempotency-key support.
+- whether the adapter contract claims provider idempotency-key support;
+- the harness ID/version and environment/context identity under which the operation was authorized.
 
 The intent is appended and fsynced before the adapter is called. On POSIX, the journal also fsyncs its parent directory when first creating the run file. The event does not persist the raw resolved input mapping; it persists a digest. Existing flow context and successful operation outputs are still journaled as flow state.
 
@@ -74,7 +75,9 @@ The test suite now exercises:
 - harness-version and environment drift: an otherwise idempotent pending operation is not replayed through a different harness version or environment;
 - torn final append: an unterminated final JSONL record is truncated to the last newline-delimited event; a newline-terminated malformed record is retained and raises corruption;
 - cancellation with an unresolved intent is refused so the flow remains reconcilable;
-- an out-of-order operation index is rejected by the reducer.
+- an out-of-order operation index is rejected by the reducer;
+- a pending operation is not replayed after harness-version or environment/context drift;
+- an unterminated final journal record is truncated while preserving earlier committed events, and a newline-terminated corrupt record is rejected.
 
 The provider deduplication test is a simulated adapter contract. It does not prove any real provider's implementation. Tests of that guarantee must be added for each concrete adapter and provider version.
 
