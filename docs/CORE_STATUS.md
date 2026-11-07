@@ -34,6 +34,8 @@
 - Local append-only JSONL journal with sequence validation, complete-write loops, file fsync and POSIX parent-directory fsync on initial run-file creation.
 - Per-operation intent, success, failure, unknown-outcome and reconciliation events; replay reconstructs pending intents, attempt counters and completed operation checkpoints.
 - Per-node-visit operation scopes remain stable across retries but change when a flow loops back to the same node.
+- Operation intents and checkpoints record harness ID/version and environment/context; recovery rejects pending replay when these declared scope values change.
+- Loader truncates only an unterminated final append tail and retains newline-terminated corruption as a hard error.
 - The reducer rejects operation-index gaps and refuses to cancel a flow while an external operation intent remains unresolved, preserving the reconciliation path.
 - Recovery by replaying the journal into the flow reducer.
 - Single-writer-per-run contract remains.
@@ -45,7 +47,7 @@
 - Checks operation allowlist, approval and attempt ceiling before ordinary operation invocation.
 - Persists operation intent before provider invocation and the operation result before flow-node completion.
 - Checkpoints each operation in a multi-operation habit and skips the completed prefix after recovery.
-- Automatically replays pending READ_ONLY/IDEMPOTENT operations and DEDUPLICATED operations only where provider-key support is declared; preserves unknown outcomes.
+- Automatically replays pending READ_ONLY/IDEMPOTENT operations and DEDUPLICATED operations only where provider-key support is declared, and only when harness ID/version plus environment/context match the committed intent; preserves unknown outcomes.
 - Stops pending NON_REPEATABLE/COMPENSATABLE effects for evidence-backed reconciliation; applied reconciliation resumes from the checkpoint, while not-applied reconciliation remains stopped.
 - Records operation outcome/cost metadata and checks postconditions before completing the flow node.
 - Uses `HabitRegistry` for exact-version lookup; the registry is in memory, not durable.
@@ -103,7 +105,7 @@ The prior worker-level checkpoint gap is addressed in the PR #8 draft:
 
 Fault-injection tests cover failure before intent append, process termination after provider effect but before acknowledgement, result-checkpoint write failure, provider-side deduplicated retry, multi-operation completed-prefix recovery, both reconciliation outcomes, unresolved-operation cancellation refusal, sequential operation-index enforcement, torn unterminated result-tail recovery and refusal to repair newline-terminated corrupt records.
 
-**Boundary:** these are local journal and simulated-adapter guarantees. No production adapter exists. The local journal cannot atomically commit with an arbitrary provider, and the core reconciliation method does not authenticate the supplied `reconciled_by` identity or validate provider evidence. HR-02 remains critical.
+**Boundary:** these are local journal and simulated-adapter guarantees. No production adapter exists. The local journal cannot atomically commit with an arbitrary provider, and the core reconciliation method does not authenticate the supplied `reconciled_by` identity or validate provider evidence. Harness ID/version/environment/context are declarations, not an immutable adapter build digest. HR-02 remains critical; see HR-14 and HR-15.
 
 Final PR #8 CI run [42318545062](https://github.com/Loofy147/HabitRoute/actions/runs/42318545062) passed 10 legacy experiment tests, 123 core/contract tests and 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (146 tests per version). This run corresponds to PR #8 head `afc0be7303cd0ff105cf11455ac90b087cf4fe26`.
 
@@ -127,6 +129,7 @@ See [OPERATION_CHECKPOINTS_AND_RECOVERY.md](OPERATION_CHECKPOINTS_AND_RECOVERY.m
 - No production adapter invokes external APIs, CLIs, repositories, scripts or agent runtimes.
 - No production-grade provider enforcement for credentials, egress, hard resource/time budgets, cancellation or output limits.
 - No actual provider-specific idempotency-key conformance proof or lookup/reconciliation adapter.
+- No independently measured adapter implementation/build fingerprint beyond declared harness ID/version and environment/context values; adapters must version implementation changes honestly until a stronger fingerprint contract exists.
 - No authenticated reconciliation service; the current core method only records caller-supplied actor and evidence-reference strings.
 - No multi-worker/multi-host execution; JSONL remains single-writer-per-run.
 - No transactional coordination between external operations and the local flow journal; an ambiguous provider outcome still requires idempotency or reconciliation.
@@ -145,7 +148,7 @@ See [OPERATION_CHECKPOINTS_AND_RECOVERY.md](OPERATION_CHECKPOINTS_AND_RECOVERY.m
 
 1. Review and merge the architecture preparation and hand-design PRs in dependency order; keep the habit in design-only state until runtime gates exist.
 2. Implement structured append-only trace events and a separate immutable decision/outcome ledger; add semantic validation and replay/integrity tests.
-3. Validate operation-level intent/result checkpoints against every supported filesystem and add torn-tail/corruption recovery tests.
+3. Validate operation-level intent/result checkpoints against every supported filesystem and power-loss model; local tests cover unterminated-tail recovery and strict rejection of newline-terminated corruption.
 4. Implement a concrete provider adapter with independently verified idempotency/deduplication or authoritative lookup/reconciliation, then put reconciliation behind authenticated approval.
 5. Enforce complete budget, evidence, constraint, intervention and later-revalidation gates in a verdict evaluator.
 6. Replace caller-supplied aggregate profiles as the sole efficiency evidence with raw paired trial records and independent verification.
