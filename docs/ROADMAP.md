@@ -31,7 +31,7 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 - [x] Obtain passing CI for the extension branch: [42315856101](https://github.com/Loofy147/HabitRoute/actions/runs/42315856101) passed 131 tests per Python version (3.11/3.12/3.13); draft review remains open.
 - [x] Replace the crash-defect characterization with safe local-journal recovery tests for intent, result-write failure, idempotency replay, multi-operation prefix resume and explicit reconciliation.
 
-**Interpretation:** the crash tests deliberately reproduce duplicate external effects after abrupt termination; they do not close HR-01/HR-02. The paired evaluator validates analysis mechanics only; it does not provide production trial evidence or a promotion decision.
+**Interpretation:** PR #7's crash tests reproduced duplicate external effects. PR #8 replaces those tests with local-journal recovery guarantees and passes CI, partially closing HR-01. HR-02 remains open because no local journal can atomically commit with an arbitrary provider. The paired evaluator validates analysis mechanics only; it does not provide production trial evidence or a promotion decision.
 
 ## P0 — Preserve and reproduce existing research
 
@@ -64,9 +64,11 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 - [x] Commit a durable per-operation intent before adapter invocation and result checkpoint after each operation inside a multi-operation habit.
 - [x] Add fault injection before intent commit, after external side effects but before acknowledgement, and after provider acknowledgement but before result checkpoint.
 - [x] Prove that a completed multi-operation prefix is skipped after recovery and that a pending non-repeatable effect is not reissued.
+- [x] Reject cancellation while an operation outcome is unresolved; require reconciliation first.
+- [x] Reject out-of-order or skipped operation checkpoint indices in the event reducer.
 - [ ] Validate recovery against actual provider idempotency/deduplication and reconciliation contracts.
 
-**Gate:** local per-operation intent/result replay is implemented and tested in draft PR #8. The provider/local-journal atomicity problem, actual provider key enforcement, authenticated reconciliation and target-filesystem corruption behavior remain open.
+**Gate:** local per-operation intent/result replay is implemented and tested in draft PR #8; run [42317958263](https://github.com/Loofy147/HabitRoute/actions/runs/42317958263) passed 138 tests per Python version. The provider/local-journal atomicity problem, actual provider key enforcement, authenticated reconciliation and target-filesystem corruption behavior remain open.
 
 ## P3 — Harness enforcement and recovery
 
