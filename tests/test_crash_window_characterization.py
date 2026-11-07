@@ -200,8 +200,15 @@ class DurableOperationCheckpointTests(unittest.TestCase):
                 reconciled_by="operator:verified",
                 outputs={"release.published": "true"},
             )
+            self.assertEqual(restored.snapshot.status, FlowStatus.RUNNING)
+            self.assertIsNone(restored.snapshot.pending_operation)
+            self.assertEqual(dict(restored.snapshot.context).get("release.published"), "true")
             finished = FlowWorker(harness, registry).dispatch(restored)
-            self.assertEqual(finished.status, DispatchStatus.TERMINAL)
+            self.assertEqual(
+                finished.status, DispatchStatus.TERMINAL,
+                f"reason={finished.reason}; state={dict(restored.snapshot.context)}; "
+                f"completed={restored.snapshot.completed_operations}",
+            )
             self.assertEqual(restored.snapshot.status, FlowStatus.SUCCEEDED)
             # Both operations are already checkpointed; neither is replayed.
             self.assertEqual(
