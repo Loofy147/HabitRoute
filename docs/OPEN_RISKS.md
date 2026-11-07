@@ -22,7 +22,7 @@
 
 ## What PR #8 establishes
 
-The latest full matrix run [42318850901](https://github.com/Loofy147/HabitRoute/actions/runs/42318850901) passed 10 legacy experiment tests, 124 core/contract tests and 13 paired-evaluation tests (147 per version) on Python 3.11, 3.12 and 3.13. A later documentation-only commit is running the same matrix again. This is local deterministic test evidence, not production-provider evidence.
+The latest full matrix run on the current PR #8 head [42318974329](https://github.com/Loofy147/HabitRoute/actions/runs/42318974329) passed 10 legacy experiment tests, 124 core/contract tests and 13 paired-evaluation tests (147 per version) on Python 3.11, 3.12 and 3.13. This is local deterministic test evidence, not production-provider evidence.
 
 The worker now follows this local sequence for each provider operation:
 
