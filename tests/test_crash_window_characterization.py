@@ -426,7 +426,7 @@ class DurableOperationCheckpointTests(unittest.TestCase):
             self.assertEqual(restored.snapshot.status, FlowStatus.NEEDS_ATTENTION)
             self.assertIsNone(restored.snapshot.pending_operation)
             result = FlowWorker(harness).dispatch(restored)
-            self.assertEqual(result.status, DispatchStatus.TERMINAL)
+            self.assertEqual(result.status, DispatchStatus.NEEDS_ATTENTION)
             self.assertEqual(len(harness.calls), 1)
             self.assertEqual(harness.external_effects["deploy.publish"], 1)
 
