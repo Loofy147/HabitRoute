@@ -66,9 +66,11 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 - [x] Prove that a completed multi-operation prefix is skipped after recovery and that a pending non-repeatable effect is not reissued.
 - [x] Reject cancellation while an operation outcome is unresolved; require reconciliation first.
 - [x] Reject out-of-order or skipped operation checkpoint indices in the event reducer.
+- [x] Pin pending operation intents to harness and environment/context identity; fail closed on drift during recovery.
+- [x] Test truncation of an unterminated trailing event while preserving a prior committed intent; reject newline-terminated corrupt records.
 - [ ] Validate recovery against actual provider idempotency/deduplication and reconciliation contracts.
 
-**Gate:** local per-operation intent/result replay is implemented and tested in draft PR #8; run [42317958263](https://github.com/Loofy147/HabitRoute/actions/runs/42317958263) passed 138 tests per Python version. The provider/local-journal atomicity problem, actual provider key enforcement, authenticated reconciliation and target-filesystem corruption behavior remain open.
+**Gate:** local per-operation intent/result replay, harness/environment identity pinning and the tested torn-tail policy are implemented in draft PR #8; run [42318545062](https://github.com/Loofy147/HabitRoute/actions/runs/42318545062) passed 146 tests per Python version. Provider/local-journal atomicity, actual provider key enforcement, authenticated reconciliation and target-filesystem power-loss/corruption behavior remain open.
 
 ## P3 — Harness enforcement and recovery
 
