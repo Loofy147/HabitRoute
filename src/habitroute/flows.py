@@ -341,10 +341,37 @@ class JsonlFlowJournal:
             raise ValueError("unsafe run_id")
         return self.root / f"{run_id}.jsonl"
 
+    def _truncate_unterminated_tail(self, path: Path) -> bool:
+        """Remove only a final record lacking its newline commit delimiter.
+
+        The worker invokes a provider only after append() has written the newline
+        and fsynced it. Therefore an unterminated tail is an append that never
+        returned successfully and is safe to discard. Newline-terminated corrupt
+        records are not silently repaired.
+        """
+        if not path.exists() or path.stat().st_size == 0:
+            return False
+        with path.open("rb") as handle:
+            handle.seek(-1, os.SEEK_END)
+            if handle.read(1) == b"\\n":
+                return False
+            handle.seek(0)
+            raw = handle.read()
+        last_delimiter = raw.rfind(b"\\n")
+        valid_length = last_delimiter + 1
+        fd = os.open(path, os.O_WRONLY)
+        try:
+            os.ftruncate(fd, valid_length)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        return True
+
     def load(self, run_id: str) -> tuple[FlowEvent, ...]:
         path = self._path(run_id)
         if not path.exists():
             return ()
+        self._truncate_unterminated_tail(path)
         events: list[FlowEvent] = []
         with path.open("r", encoding="utf-8") as handle:
             for line_number, line in enumerate(handle, start=1):
