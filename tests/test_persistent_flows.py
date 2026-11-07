@@ -216,7 +216,7 @@ class PersistentFlowTests(unittest.TestCase):
             PersistentFlow.start(definition(), "run-corrupt-001", journal)
             path = journal._path("run-corrupt-001")
             with path.open("ab") as handle:
-                handle.write(b"{corrupt}\\n")
+                handle.write(b"{corrupt}\n")
                 handle.flush()
             before = path.read_bytes()
             with self.assertRaisesRegex(ValueError, "corrupt flow journal"):
