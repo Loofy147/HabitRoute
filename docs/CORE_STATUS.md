@@ -108,7 +108,7 @@ Fault-injection tests cover failure before intent append, process termination af
 
 **Boundary:** these are local journal and simulated-adapter guarantees. No production adapter exists. The local journal cannot atomically commit with an arbitrary provider, and the core reconciliation method does not authenticate the supplied `reconciled_by` identity or validate provider evidence. Harness ID/version/environment/context are declarations, not an immutable adapter build digest. HR-02 remains critical; see HR-14 and HR-15.
 
-Latest PR #8 full matrix run [42318850901](https://github.com/Loofy147/HabitRoute/actions/runs/42318850901) passed 10 legacy experiment tests, 124 core/contract tests and 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (147 tests per version). This run corresponds to PR #8 head `075f93475b28d0e3571ce212a17ea40ae8557523`; a later documentation-only head is under CI.
+Latest full matrix run for the current PR #8 head `5149c73c825521f3a55b80f63b1e4fce3111431c`, [42318974329](https://github.com/Loofy147/HabitRoute/actions/runs/42318974329), passed 10 legacy experiment tests, 124 core/contract tests and 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (147 tests per version).
 
 See [OPERATION_CHECKPOINTS_AND_RECOVERY.md](OPERATION_CHECKPOINTS_AND_RECOVERY.md) for the protocol, recovery matrix, test evidence and limits.
 
@@ -120,7 +120,7 @@ See [OPERATION_CHECKPOINTS_AND_RECOVERY.md](OPERATION_CHECKPOINTS_AND_RECOVERY.m
 - PR #6 run [42313250815](https://github.com/Loofy147/HabitRoute/actions/runs/42313250815) passed **104 tests on each of Python 3.11, 3.12 and 3.13**.
 - CI installs `jsonschema>=4.23,<5` for schema/contract tests; HabitRoute's runtime dependency list remains empty.
 - PR #7 run [42315937577](https://github.com/Loofy147/HabitRoute/actions/runs/42315937577) passed 10 legacy experiment tests + 108 core/contract tests + 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (131 per version).
-- PR #8 run [42318850901](https://github.com/Loofy147/HabitRoute/actions/runs/42318850901) passed 10 legacy experiment tests + 124 core/contract tests + 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (147 per version).
+- Current PR #8 head run [42318974329](https://github.com/Loofy147/HabitRoute/actions/runs/42318974329) passed 10 legacy experiment tests + 124 core/contract tests + 13 paired-evaluation tests on each of Python 3.11, 3.12 and 3.13 (147 per version).
 - PR #4 remains a draft against `docs/unified-runtime-foundation`; PR #6 remains a draft against the PR #4 branch; PR #7 remains a draft against PR #6's branch. None is merged into main.
 - Historical 77/77 count applies to commit `090fc7c3fddbc95c7b128045fa7a20ab3dd63400`, not the current tested branch.
 - Legacy simulator tests remain under `experiments/step_savings_v1/`.
