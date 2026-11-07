@@ -18,6 +18,7 @@
 | HR-12 | High | OPEN | Package integration could introduce circular coupling. | Import-graph checks and component-absence tests in CI. |
 | HR-13 | High | OPEN | License compatibility/provenance of imported material. | File-level license inventory, dependency/SBOM scan and preserved notices. |
 | HR-14 | High | OPEN | Reconciliation records accept a caller-supplied `reconciled_by` string and evidence reference; the core library does not authenticate the caller or validate the external evidence. | Put reconciliation behind an authenticated/authorized operator boundary; bind evidence to an immutable provider query/result; audit actor identity from trusted credentials. |
+| HR-15 | High | OPEN | Operation intents pin harness ID/version and environment/context, but there is no independently measured adapter implementation digest. A provider adapter could change while reusing the same declared version. | Require honest immutable adapter-versioning and add a source/build/configuration fingerprint to the harness contract and operation provenance; reject replay on fingerprint mismatch. |
 
 ## What PR #8 establishes
 
@@ -25,12 +26,12 @@ The current draft head `455c31f20ed198b70cd4696b983d562558dfc39d` passed [CI run
 
 The worker now follows this local sequence for each provider operation:
 
-1. Append and fsync `OPERATION_INTENT` before invoking the adapter.
+1. Append and fsync `OPERATION_INTENT` before invoking the adapter. The intent pins harness ID/version plus environment/context IDs.
 2. Invoke the adapter using the operation-specific idempotency key.
 3. Append and fsync `OPERATION_SUCCEEDED`, `OPERATION_FAILED`, or `OPERATION_OUTCOME_UNKNOWN`.
 4. Advance the flow node only after required operation checkpoints exist.
 
-The JSONL journal now writes until the complete record has been appended, fsyncs the file, and fsyncs the parent directory when creating the run file on POSIX. A machine-habit worker checkpoints each operation and resumes from the committed prefix. The reducer also rejects skipped operation indexes and refuses to cancel a flow while an unresolved external operation remains pending, so the reconciliation path is not discarded by a terminal cancellation.
+The JSONL journal now writes until the complete record has been appended, fsyncs the file, and fsyncs the parent directory when creating the run file on POSIX. On load, it truncates an unterminated final tail to the previous newline delimiter; newline-terminated corrupt records remain hard failures. A machine-habit worker checkpoints each operation and resumes from the committed prefix. Pending-operation replay is rejected if harness ID/version or environment/context differs from the committed intent. The reducer also rejects skipped operation indexes and refuses to cancel a flow while an unresolved external operation remains pending, so the reconciliation path is not discarded by a terminal cancellation.
 
 Recovery behavior is conservative:
 
@@ -46,8 +47,9 @@ Crash tests cover failure before the intent append, process termination after a 
 - A side-effecting non-repeatable operation with an unknown outcome must stop for reconciliation.
 - A missing/invalid permission or approval must fail closed.
 - An unknown operation-effect class must not be retried.
-- A pending operation whose identity, effect, input digest or idempotency key differs from the pinned step must stop.
+- A pending operation whose identity, effect, input digest, idempotency key, harness ID/version or environment/context differs from the committed intent must stop.
 - A DEDUPLICATED effect must not be considered safe unless the real provider enforces the supplied key.
+- A changed adapter implementation must use a new immutable harness version or implementation fingerprint before pending work is replayed.
 - A not-applied reconciliation must not silently authorize a second call.
 - An evidence-gate input with no trials or incomplete cases must not pass vacuously.
 - A source/version mismatch invalidates habit eligibility until revalidated.
