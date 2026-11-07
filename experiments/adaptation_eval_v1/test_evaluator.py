@@ -17,6 +17,7 @@ def make_trial(
     opportunity: bool | None = True,
     action: bool | None = False,
     loaded: bool | None = None,
+    adaptation_digest: str = A,
     task_success: bool | None = True,
     contract_passed: bool | None = True,
     environment: str = C,
@@ -34,7 +35,7 @@ def make_trial(
         environment_sha256=environment, agent_sha256=D, model_sha256=B,
         opportunity_present=opportunity, target_action_observed=action,
         task_success=task_success, contract_passed=contract_passed,
-        adaptation_digest=A if adapted else None,
+        adaptation_digest=adaptation_digest if adapted else None,
         adaptation_loaded=loaded if adapted else None,
         trace_complete=trace_complete, constraint_violations=violations,
         unrelated_work_count=unrelated, costs=costs,
@@ -69,6 +70,7 @@ class PairedEvaluationTests(unittest.TestCase):
     def test_exact_mcnemar_uses_only_discordant_pairs(self):
         self.assertEqual(exact_mcnemar_two_sided_p(4, 0), 0.125)
         self.assertEqual(exact_mcnemar_two_sided_p(0, 0), 1.0)
+        self.assertEqual(exact_mcnemar_two_sided_p(10, 0), 0.001953125)
 
     def test_absent_opportunity_is_not_counted_as_prevention(self):
         trials = (
@@ -147,6 +149,51 @@ class PairedEvaluationTests(unittest.TestCase):
         self.assertEqual(result.adapted_pairs_with_constraint_violations, 1)
         self.assertEqual(result.adapted_constraint_violation_count, 1)
         self.assertIsNone(getattr(result, "promotion_verdict", None))
+
+    def test_adaptation_digest_is_fixed_for_one_evaluation(self):
+        first = self.pair("1", True, False)
+        second = (
+            make_trial("2", Arm.BASELINE, action=True),
+            make_trial("2", Arm.ADAPTED, action=False, adaptation_digest="f" * 64),
+        )
+        with self.assertRaisesRegex(ValueError, "mix different adaptation digests"):
+            evaluate_pairs((*first, *second), minimum_opportunity_pairs=1)
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            evaluate_pairs(first, minimum_opportunity_pairs=1,
+                           expected_adaptation_digest="f" * 64)
+
+    def test_explicit_loading_state_must_match_effective_harness_fingerprint(self):
+        with self.assertRaisesRegex(ValueError, "unloaded adaptation"):
+            Trial(
+                pair_id="x", case_id="case-x", arm=Arm.ADAPTED,
+                input_sha256=D, task_signature_sha256=B, base_harness_sha256=C,
+                effective_harness_sha256=E, environment_sha256=C, agent_sha256=D,
+                model_sha256=B, opportunity_present=True, target_action_observed=False,
+                task_success=True, contract_passed=True, adaptation_digest=A,
+                adaptation_loaded=False,
+            )
+        with self.assertRaisesRegex(ValueError, "loaded adaptation"):
+            Trial(
+                pair_id="x", case_id="case-x", arm=Arm.ADAPTED,
+                input_sha256=D, task_signature_sha256=B, base_harness_sha256=C,
+                effective_harness_sha256=C, environment_sha256=C, agent_sha256=D,
+                model_sha256=B, opportunity_present=True, target_action_observed=False,
+                task_success=True, contract_passed=True, adaptation_digest=A,
+                adaptation_loaded=True,
+            )
+
+    def test_cost_missingness_is_not_silently_dropped(self):
+        base_costs = (CostObservation("tool_calls", 5, "calls"),)
+        trials = (
+            make_trial("1", Arm.BASELINE, costs=base_costs),
+            make_trial("1", Arm.ADAPTED, costs=()),
+        )
+        result = evaluate_pairs(trials, minimum_opportunity_pairs=1)
+        summary = result.cost_summaries[0]
+        self.assertEqual(summary.metric, "tool_calls")
+        self.assertEqual(summary.paired_samples, 0)
+        self.assertEqual(summary.missing_pairs, 1)
+        self.assertEqual(result.unrelated_work_unknown, 0)
 
     def test_incomplete_trace_is_excluded_without_erasing_its_assignment(self):
         trials = (
