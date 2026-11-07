@@ -272,6 +272,7 @@ class FlowSnapshot:
     pending_operation: OperationIntent | None = None
     completed_operations: tuple[OperationCheckpoint, ...] = ()
     operation_attempts: tuple[tuple[int, int], ...] = ()
+    node_visits: tuple[tuple[str, int], ...] = ()
 
     @classmethod
     def initial(
@@ -285,6 +286,7 @@ class FlowSnapshot:
             definition_version=definition.version, current_node=definition.start_node,
             status=FlowStatus.CREATED,
             context=tuple(sorted((initial_context or {}).items())),
+            node_visits=((definition.start_node, 1),),
         )
 
     def context_dict(self) -> dict[str, str]:
@@ -302,8 +304,17 @@ class FlowSnapshot:
                 return checkpoint
         return None
 
+    def node_visit_count(self, node_id: str) -> int:
+        return dict(self.node_visits).get(node_id, 0)
+
+    def operation_scope_key(self) -> str:
+        """Unique scope for this node visit; stable across its retries and replay."""
+        return (
+            f"{self.idempotency_key()}:visit:{self.node_visit_count(self.current_node)}"
+        )
+
     def idempotency_key(self) -> str:
-        """Stable key for this logical run/node across retries and replay."""
+        """Legacy run/node scope; prefer operation_scope_key for external calls."""
         return f"{self.run_id}:{self.flow_id}:{self.definition_version}:{self.current_node}"
 
 
@@ -375,6 +386,8 @@ def _settle_at_node(
     node = definition.node(node_id)
     # Every settlement begins a new node visit, including explicit self-loops.
     reset_operation_state = True
+    visits = dict(snapshot.node_visits)
+    visits[node_id] = visits.get(node_id, 0) + 1
     operation_state = (
         {
             "pending_operation": None,
@@ -384,9 +397,15 @@ def _settle_at_node(
         if reset_operation_state else {}
     )
     if node.kind is FlowNodeKind.END:
-        return replace(snapshot, current_node=node_id, status=node.end_status, **operation_state)
+        return replace(
+            snapshot, current_node=node_id, status=node.end_status,
+            node_visits=tuple(sorted(visits.items())), **operation_state,
+        )
     status = FlowStatus.WAITING if node.kind is FlowNodeKind.WAIT else FlowStatus.RUNNING
-    return replace(snapshot, current_node=node_id, status=status, **operation_state)
+    return replace(
+        snapshot, current_node=node_id, status=status,
+        node_visits=tuple(sorted(visits.items())), **operation_state,
+    )
 
 
 def _pending_operation_from_payload(payload: Mapping[str, str]) -> OperationIntent:
@@ -666,6 +685,10 @@ class PersistentFlow:
     @property
     def idempotency_key(self) -> str:
         return self.snapshot.idempotency_key()
+
+    @property
+    def operation_scope_key(self) -> str:
+        return self.snapshot.operation_scope_key()
 
     @property
     def current_node(self) -> FlowNode:
