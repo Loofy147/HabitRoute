@@ -189,6 +189,40 @@ class PersistentFlowTests(unittest.TestCase):
             FlowNode("send", FlowNodeKind.OPERATION, "email.send", "done",
                      max_attempts=2, effect=OperationEffect.DEDUPLICATED)
 
+    def test_journal_truncates_only_an_unterminated_final_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = JsonlFlowJournal(tmp)
+            flow = PersistentFlow.start(definition(), "run-torn-001", journal)
+            path = journal._path("run-torn-001")
+            with path.open("ab") as handle:
+                handle.write(b'{"run_id":"run-torn-001","sequence":2')
+                handle.flush()
+
+            restored = PersistentFlow.restore(
+                definition(), "run-torn-001", JsonlFlowJournal(tmp)
+            )
+            self.assertEqual(restored.snapshot.last_event_sequence, 1)
+            self.assertEqual(len(JsonlFlowJournal(tmp).load("run-torn-001")), 1)
+            self.assertTrue(path.read_bytes().endswith(b"\\n"))
+            restored.fail_step("retry-after-torn-uncommitted-append")
+            self.assertEqual(
+                [event.sequence for event in JsonlFlowJournal(tmp).load("run-torn-001")],
+                [1, 2],
+            )
+
+    def test_journal_does_not_silently_repair_newline_terminated_corruption(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = JsonlFlowJournal(tmp)
+            PersistentFlow.start(definition(), "run-corrupt-001", journal)
+            path = journal._path("run-corrupt-001")
+            with path.open("ab") as handle:
+                handle.write(b"{corrupt}\\n")
+                handle.flush()
+            before = path.read_bytes()
+            with self.assertRaisesRegex(ValueError, "corrupt flow journal"):
+                journal.load("run-corrupt-001")
+            self.assertEqual(path.read_bytes(), before)
+
     def test_journal_rejects_sequence_gap(self):
         with tempfile.TemporaryDirectory() as tmp:
             journal = JsonlFlowJournal(tmp)
