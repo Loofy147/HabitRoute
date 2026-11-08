@@ -37,6 +37,7 @@ The existing model does not yet implement the complete repertoire, situation int
 
 - [Machine Habit Model v0.3](docs/MACHINE_HABIT_MODEL_V0.3.md) — proposed behavioural system model.
 - [Research Reassessment v0.3](docs/RESEARCH_REASSESSMENT_V0.3.md) — human habit analogy, prior art, evidence boundaries and comparative benchmark.
+- [Reference Habit mapping](docs/REFERENCE_HABIT_REPOSITORY_VERIFICATION_V0.3.md) — maps the existing hand-designed repository verifier to the v0.3 model.
 - [Architecture](docs/ARCHITECTURE.md) — runtime and component topology.
 - [Decisions](docs/DECISIONS.md) — accepted historical decisions and proposed superseding decisions.
 - [Roadmap](docs/ROADMAP.md) — revised research and implementation gates.
