@@ -1,99 +1,170 @@
-# Architecture
+# Architecture: integrated Machine Habit v0.3
 
-## Scope
+**Status:** proposed architecture; implementation not yet aligned  
+**Canonical product model:** [Machine Habit Model v0.3](MACHINE_HABIT_MODEL_V0.3.md)
 
-HabitRoute is a machine-execution optimization system. It discovers, verifies, versions and reuses more efficient patterns for recurring machine operations. It is not a human-habit model, reinforcement-learning skill learner, general planner or environment simulator.
+## 1. Architectural premise
 
-The canonical architecture has three primary entities:
+The Machine Habit is the primary behavioural unit. It owns the operating logic and governed repertoire required to respond to a class of situations: purpose, context awareness, knowledge, skills, tools, frameworks, models, procedures, strategy, execution, memory, verification and controlled evolution.
 
-1. **Machine Habit** — a reusable optimized operation pattern with explicit scope, pre/postconditions and matched efficiency evidence.
-2. **Execution Harness** — the replaceable environment wrapper that authorizes operations, applies controls, invokes tools/APIs/scripts, observes results and records evidence.
-3. **Persistent Flow** — a durable, versioned orchestration instance that stores progress, checkpoints, retries, waits and exact habit versions used.
+These responsibilities may be implemented as modules and may use external providers. They are nevertheless part of one logical habit identity and release. A tool registry, skill directory, workflow engine, context manager or memory database is not the habit by itself.
 
-## Runtime topology
+## 2. Logical topology
 
 ~~~text
-Persistent Flow Run
-  -> resolves current immutable Flow Definition node
-  -> asks Habit Registry for applicable Machine Habits
-  -> applies Harness authorization and preflight
-  -> executes baseline or selected habit through Harness Adapter
-  -> verifies postconditions and captures cost/evidence
-  -> appends event and commits checkpoint
-  -> advances, branches, waits, retries, pauses or terminates
+Host Application / Agent Runtime
+    |  request, lifecycle supervision, available host context
+    v
+Machine Habit (versioned behavioural unit)
+    |
+    +-- Purpose and outcome contract
+    +-- Situation awareness and context needs
+    +-- Governed capability and knowledge repertoire
+    |     +-- skills / scripts / procedures
+    |     +-- tools / APIs / CLIs / device interfaces
+    |     +-- models / frameworks / libraries / runtimes
+    |     +-- datasets / context packages / indexes / services
+    |     +-- bounded sub-habits
+    |
+    +-- Applicability, judgement and composition
+    +-- Strategies and durable Habit Episodes
+    +-- Memory, experience and evidence
+    +-- Independent verification contract
+    +-- Learning, release management and rollback
+    |
+    v
+Capability adapters and persistence backends
+    |
+    v
+Host execution boundary (credentials, sandbox, approval, egress)
+    |
+    v
+External operations and observed effects
+    |
+    v
+Evidence capture and verification -> habit memory/evaluation
 ~~~
 
-The flow owns progress. The habit owns reusable execution optimization. The harness owns execution boundaries and evidence capture.
+The drawing shows logical ownership, not a requirement to place all components in one process. Capability implementations, persistence stores and execution providers remain replaceable dependencies.
 
-## Components
+## 3. Primary entities
 
-### Machine Habit Registry
+### Machine Habit package
 
-Stores immutable habit versions, indexes by operation/trigger signature and scope, validates preconditions, and exposes active/at-risk/quarantined/revoked states. Candidate retrieval does not authorize execution.
+The immutable release manifest identifies the habit purpose, outcome contract, applicable contexts, repertoire entries, knowledge assets, policies, strategies, memory schema, evaluation requirements, authority requirements, compatibility and provenance. The habit may embed assets or pin external resources by version/digest.
 
-### Baseline and efficiency evaluator
+### Habit runtime
 
-Compares baseline and candidate procedures on the same input cohort and harness policy. Checks required outputs/postconditions and reports latency, calls, compute, tokens, external charges, retries, recovery and operator intervention separately. Promotion requires correctness plus a declared efficiency improvement.
+The runtime interprets the package. It observes the situation, checks applicability, resolves capability and knowledge needs, selects a strategy, composes a minimal sufficient plan, requests authorized execution, observes outcomes, verifies and records experience.
 
-### Execution Harness
+Routine execution may use a proven default. Novel, uncertain, degraded or high-risk situations trigger deeper inspection, alternatives, approval or abstention.
 
-Defines or wraps environment capabilities, operation allowlists, approvals, credentials boundaries, resource/time limits, validation, instrumentation, retry/idempotency semantics, interruption and fallback. Test and production harnesses share interfaces but need not share policies.
+### Habit Episode
 
-### Harness Adapter
+An episode is the durable instance of one habit operating on one situation. It pins the exact habit release and capability versions, records the situation frame and decisions, and owns progress through operation intent/result records, checkpoints, waits, retries, recovery and terminal outcome.
 
-Performs the actual operation through an API, CLI, script, repository service, agent runtime or another machine interface. It accepts an explicit operation identity and idempotency key where supported. HabitRoute must not bind itself to a particular provider.
+A generic flow/workflow engine may provide execution mechanics. The episode and its semantic lineage still belong to the habit. An external flow can coordinate multiple habits, but it must not own or erase the internal behaviour and episode history of each habit.
 
-### Persistent Flow Definition
+### Capability adapter
 
-Immutable, versioned state-machine/DAG definition containing operations, habit invocations, branches, waits, approvals, retries, subflows and terminal nodes.
+A capability adapter binds a repertoire entry to its actual implementation: skill runtime, CLI, API, framework, local program, model service or other resource. It declares input/output contracts, versions, availability, cost, required authority, side effects, failure semantics and verification expectations.
 
-### Persistent Flow Run
+### Host execution boundary
 
-Mutable run instance pinned to one flow-definition version. Stores its run ID, current node, inputs/context, attempt state, committed outputs, waiting state and exact habit versions used.
+The host harness or execution environment enforces actual credentials, permissions, sandbox, approvals, egress, quotas and side-effect controls. HabitRoute can declare and request the narrowest necessary capabilities; it cannot create authority by declaring it in a habit manifest.
 
-### Flow Journal and Checkpoint Store
+### Evidence and verifier
 
-Append-only events plus snapshots/checkpoints. Replay reconstructs control state; it must not repeat external operations already recorded as committed. The store abstraction must support transactional sequence checks or equivalent single-writer guarantees.
+Evidence links the situation, decision, exact capability versions, operation outcomes, output checks, cost and user-visible completion. Verification must not rely only on the executor or model's own success assertion.
 
-### Evidence and provenance
+## 4. Operating sequence
 
-Every run/event records flow/definition version, node, habit version, harness/environment version, operation identity, idempotency key, timestamps, outputs, postcondition results, status and cost measurements. Historical evidence is immutable; lifecycle changes append new events.
+1. Receive a task and determine whether the habit is in scope.
+2. Gather only the observations needed to characterize the current situation.
+3. Check context freshness, dependency health, constraints and uncertainty.
+4. Filter repertoire entries by capability contract, compatibility, trust, budget and host authority.
+5. Select a proven strategy or deliberate over alternatives.
+6. Compose the smallest sufficient set of capabilities for the outcome contract.
+7. Create a version-pinned durable Habit Episode.
+8. Execute through authorized adapters; commit intent and result/checkpoint records according to side-effect semantics.
+9. Verify outputs, effects, quality and constraints independently.
+10. Record cost, outcome, uncertainty and provenance.
+11. Consolidate experience and propose improvements separately from active execution.
+12. Evaluate, stage, promote or reject a new immutable release; monitor and roll back when required.
 
-## Machine habit lifecycle
+## 5. Capability repertoire and composition
 
-`CANDIDATE -> EVALUATED -> VERIFIED -> ACTIVE -> AT_RISK -> QUARANTINED -> REVALIDATED`
+Every capability entry should define, where applicable:
 
-`REVOKED` and `SUPERSEDED` are terminal lifecycle outcomes for that version.
+- stable ID and type;
+- source, owner, license and provenance;
+- pinned version, digest or provider revision;
+- purpose and applicability conditions;
+- input/output schema and expected semantics;
+- required permissions and data exposure;
+- dependencies, compatibility and runtime requirements;
+- availability, health, timeout and failure modes;
+- latency, calls, compute, token/context and external cost;
+- retry, idempotency, deduplication and compensation semantics;
+- test and verification evidence;
+- fallback or replacement capability.
 
-Candidate generation is not activation. An active habit must satisfy its context/input/harness contract and have evidence that the optimization preserves required behavior while improving the declared cost objective.
+A remote resource can be included in the repertoire by a pinned contract and adapter. The habit does not claim to own the remote provider, and a generic interface does not prove cross-provider equivalence.
 
-## Persistent execution semantics
+Composition follows hard constraints first. The system then seeks minimum sufficient capability coverage under the declared outcome contract. Fewer operations, tools or tokens are not acceptable when they reduce quality, omit a required check or increase risk.
 
-- Definitions are immutable/versioned; active runs pin their definition version.
-- Checkpoint a side-effecting operation before advancing the cursor.
-- An in-flight external operation may have completed even if the worker lost its response.
-- Retries use operation-specific idempotency, deduplication or compensation rules.
-- Never promise exactly-once effects from a durable journal alone.
-- Store external observations, time, random outcomes and model/tool responses needed for deterministic replay.
-- If safe continuation cannot be established, move the run to `NEEDS_ATTENTION` rather than guessing or retrying indefinitely.
+## 6. Memory and learning
 
-## Core invariants
+Memory is structured by purpose, not a single undifferentiated transcript:
 
-1. Machine habits are operation optimizations, not general skills.
-2. Harness policy is authoritative; a habit cannot widen its capabilities or bypass approvals.
-3. A candidate runs only within its declared environment, harness, trigger, input and precondition scope.
-4. A habit is promoted only after behavior/postconditions pass and declared efficiency improves.
-5. Baseline execution remains available for fallback and matched comparison.
-6. A persistent flow owns run progress; a habit does not own durable workflow state.
-7. A flow run pins the exact definition and habit versions it used.
-8. Checkpoints and event sequence are committed before a flow advances.
-9. Replays do not repeat committed side effects.
-10. Non-idempotent actions are not automatically retried without verified deduplication or compensation.
-11. Cost dimensions and correctness measures remain separately inspectable.
-12. All evidence is reproducible from run, code, harness, input cohort and dependency provenance.
+- declarative: facts, schemas, environment models and constraints;
+- procedural: verified methods and capability-use patterns;
+- episodic: specific situations, decisions, operations and outcomes;
+- semantic/relational: relationships among context, capabilities, failures and outcomes.
 
-## Relationship to the earlier experiment
+Every memory has provenance, scope, freshness, validity conditions and correction/retirement semantics. Episodes remain append-only evidence; consolidation creates separately versioned memory assets.
 
-`experiments/step_savings_v1/` remains a useful synthetic experiment on transition-route reuse, adaptive audit and capacity-limited retention. It is a narrow baseline for one form of machine execution memory, not a proof of durable machine habits or general tool-workflow efficiency.
+Candidate learning must be separated from active behaviour. Use matched cases, held-out tests, independent verification, shadow/canary rollout where appropriate, and explicit promotion/rollback decisions. Never silently mutate an active release.
 
-The option-oriented `src/habitroute/contracts.py` and `execution.py` are retained as prototype/compatibility code. The canonical product model is in `docs/MACHINE_HABITS_AND_FLOWS.md` and `docs/HABIT_SPEC_v0.1.md` (machine-habit spec v0.2). New core work should be added in machine-operation and persistent-flow modules.
+## 7. Durability and recovery
+
+Habit identity, repertoire manifests, knowledge, decision policies, episodes, evidence and evolution lineage must survive process/session restart. An active episode pins exact versions so that a deployment cannot silently substitute a changed tool or strategy during recovery.
+
+For external effects, journal durability is not an exactly-once guarantee. Operations require read-only/idempotent/deduplicated/compensatable/non-repeatable classification. Unknown outcomes require provider reconciliation, safe deduplication, compensation where proven, or human intervention. Do not retry a non-repeatable effect blindly.
+
+## 8. Integration boundaries
+
+- **CPM:** optional capability for context-package resolution, retrieval, budgeting, progressive disclosure and caching. The habit owns its context needs and decides when/how CPM is used.
+- **Agent Skills:** an interoperable format for procedural assets; skills may be embedded or referenced in the habit repertoire. A skill alone is not the whole habit.
+- **Models:** capabilities selected by the habit according to task needs, policy, provider availability, evaluation and budget; the model does not define habit identity.
+- **Workflow engines:** optional persistence/orchestration backends for episode execution. They do not own habit meaning or learning.
+- **Claude Code, Codex or other agent hosts:** execution environments or supervisors that provide tools and enforce their own security boundaries. HabitRoute should integrate through adapters rather than recreate each product.
+- **External verifiers:** may evaluate outputs, invariants or policy compliance; their identity and evidence must be recorded.
+
+## 9. Mapping to current repository code
+
+| Current component | Role under the proposed model | Status |
+|---|---|---|
+| MachineHabit in machine.py | One narrow operation strategy and scope contract | Implemented prototype; incomplete |
+| HarnessProfile / HarnessAdapter | Capability/host binding and execution contract | Partial; no production enforcement adapter proven |
+| flows.py / FlowWorker | Durable episode execution primitives | Partial; must be mapped to HabitEpisode semantics |
+| HabitRegistry | Versioned habit package/release registry | Current registry is in-memory; durable package registry absent |
+| step_savings_v1 | Early experiment in memory retention and route efficiency | Synthetic evidence only |
+| contracts.py / execution.py | Earlier option/route research prototype | Historical, non-canonical |
+
+The current core is not an implementation of the complete v0.3 model. The open PR #8 operation-checkpoint work is still a draft and should be evaluated as an episode-durability component, not treated as the entire durability solution.
+
+## 10. Core invariants
+
+1. The habit owns its operating behaviour and governed repertoire.
+2. Every selected capability is traceable to a situation, purpose, policy and pinned contract.
+3. Hard compatibility, trust, safety and authority constraints precede optimization.
+4. Capability composition is minimum-sufficient under correctness and quality constraints.
+5. Every episode pins exact habit, strategy, policy and capability versions.
+6. Replaying committed history does not repeat completed side effects.
+7. Unknown non-repeatable effects require reconciliation or escalation.
+8. Memory retains source, scope, freshness, uncertainty and contradictory evidence.
+9. Independent verification gates promotion.
+10. Active releases are immutable; candidate evolution is staged and reversible.
+11. Cost and quality dimensions remain inspectable separately.
+12. Missing context or capability can produce fallback, approval, or abstention—not fabricated success.

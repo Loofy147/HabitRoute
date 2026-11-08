@@ -1,85 +1,99 @@
-# Unified Agent Runtime — Architecture Decision
+# Unified Agent Runtime — integration decision under Machine Habit v0.3
 
-**Decision date:** 2026-11-06  
-**Status:** Accepted direction; implementation not yet integrated  
-**Host repository:** `Loofy147/HabitRoute`  
-**Base snapshot:** `43d714c8760a15026e0acb966919f483d893e7d0`
+**Decision date:** 2026-11-08  
+**Status:** proposed boundary revision; CPM import remains unimplemented  
+**Host repository:** Loofy147/HabitRoute  
+**Canonical product model:** [Machine Habit Model v0.3](MACHINE_HABIT_MODEL_V0.3.md)
 
-## Decision
+## 1. Decision
 
-Evolve the existing HabitRoute repository into the modular monorepo for HabitRoute and Context Package Manager (CPM). Do not create a second repository as the first integration step. HabitRoute remains the canonical execution-memory project and its existing history remains intact.
+Evolve HabitRoute into a modular repository that can host the Machine Habit system, Context Package Manager (CPM) and a thin host/runtime integration. The Machine Habit remains the primary behavioural unit.
 
-Combine capabilities at the runtime/orchestration level. Do not merge package identities, data models, storage systems or safety ownership.
+Under v0.3, CPM is one possible context-management capability in a habit's governed repertoire. The habit owns its purpose, situation model, context requirements and decision about when/how to use CPM. CPM can implement package resolution, retrieval, progressive disclosure, budgeting, manifests and caching. It does not own the habit's operational judgement or identity.
 
-## Product responsibilities
+Packages may remain separately installable and stores may remain separate. These are replaceable implementation boundaries, not a semantic rule that skills, context or other capabilities are outside the habit.
 
-| Component | Owns | Must not own |
+## 2. Product and infrastructure responsibilities
+
+| Element | Role in the system | Boundary |
 |---|---|---|
-| Context Package Manager (CPM) | Skill/package registry, progressive disclosure, context planning, context manifests, budgeting, retrieval and context cache | Machine-habit definitions, flow progress, operation authorization |
-| HabitRoute | Machine habits, operation-effect semantics, harness contracts, persistent flow definitions/runs, execution evidence | Context selection policy, skill-body loading, agent prompt assembly |
-| Unified Agent Runtime | Task coordination, context-to-habit composition, adapter selection, run manifests, explainable plans | Replacing package-local safety gates or silently rewriting package state |
-| Shared contracts | Versioned task, context, habit-selection, event-reference and evidence envelopes | Shared mutable memory or a universal opaque score |
-| Independent verifier | Checks outcomes, postconditions, experiment evidence and release gates | Trusting the executor's success claim without evidence |
+| Machine Habit | Owns purpose, situation awareness, governed repertoire, capability-use behaviour, composition, strategies, episodes, memory, verification and evolution | Cannot grant itself host permissions or claim ownership of remote provider infrastructure |
+| CPM | Provides context/package registry, retrieval, progressive disclosure, budgeting, manifests and cache as a capability | Does not decide the habit's overall strategy or own habit identity/episodes |
+| Host Agent / Runtime | Submits tasks, supervises execution, provides runtime services and can coordinate multiple habits | Must not silently rewrite a habit release or bypass its own security controls |
+| Host Harness / Environment | Enforces credentials, sandbox, egress, approvals, quotas and actual tool execution constraints | Its permissions are authoritative; the habit's declared policy is not a security boundary |
+| Capability adapters | Bind repertoire entries to models, APIs, CLIs, scripts, frameworks, context services and other implementations | Must expose versioned contracts and explicit effect/failure semantics |
+| Evidence verifier | Independently checks outcomes, invariants, experiments and release gates | Must not accept the executor's success claim as sufficient evidence |
 
-## Five invariants
+## 3. Five integration invariants
 
-1. **Independent installability:** CPM and HabitRoute remain independently importable, testable and distributable.
-2. **Acyclic dependencies:** neither package imports the other. The runtime is the composition point.
-3. **Separate stores:** CPM context cache, HabitRoute habit registry and flow journal remain different stores with different retention and consistency rules.
-4. **Shared provenance, not shared authority:** events may reference task IDs, context manifest digests, habit versions and evidence IDs; those references do not grant permission.
-5. **Independent verification:** context or operation optimization cannot waive harness authorization, contract checks, postconditions or recovery constraints.
+1. **Habit ownership:** the habit owns the logical repertoire, context needs, capability-use policy, strategies and episode lineage.
+2. **Replaceable implementation:** CPM, model providers, tools, workflow engines, storage and host harnesses can be replaced through versioned contracts when compatibility is demonstrated.
+3. **Acyclic packages:** CPM and the HabitRoute package may remain independently importable; neither needs a private import from the other. The habit can call CPM through a public adapter.
+4. **Provenance and authority separation:** manifests may record context digests, capability IDs, habit releases, evidence IDs and host identities. These references do not grant authority.
+5. **Independent verification:** context optimization or capability reuse cannot waive host authorization, output contracts, postconditions or recovery constraints.
 
-## Repository layout
+## 4. Logical repository layout
 
-The first migration should minimize disruption to the working HabitRoute package. Preserve the current root-level HabitRoute project initially; add CPM as an independently installable package under `packages/contextpm/`. Add the runtime under `runtime/` and language-neutral schemas under `shared/contracts/`.
+The current root-level HabitRoute package should be preserved until a behavior-preserving move is proven. The target may add:
 
-Target logical layout:
-
-```text
+~~~text
 HabitRoute/
-├── src/habitroute/                 # preserve initially; move only in a tested migration
-├── tests/                          # HabitRoute core tests
-├── experiments/step_savings_v1/    # preserve unchanged
+├── src/habitroute/                  # existing core; migrate only with tests
+├── tests/
+├── experiments/step_savings_v1/     # preserved legacy experiment
 ├── packages/
-│   └── contextpm/                  # CPM v0.5.0: contextpm + cheg
+│   └── contextpm/                   # independently installable CPM source
 ├── runtime/
-│   └── unified_agent_runtime/      # thin composition layer
+│   └── unified_agent_runtime/       # optional host composition and scheduling
 ├── shared/
-│   ├── contracts/                  # versioned JSON Schemas
-│   └── evidence/                   # evidence format and validation
+│   ├── contracts/                   # versioned, language-neutral schemas
+│   └── evidence/                    # evidence formats and validators
 ├── benchmarks/
-│   ├── context_efficiency/
+│   ├── habit_repertoire/
 │   ├── habit_execution/
-│   └── combined_runtime/
-├── docs/
-└── pyproject.toml                  # HabitRoute distribution until migration is proven
-```
+│   └── cross_runtime/
+└── docs/
+~~~
 
-A later symmetrical `packages/habitroute/` layout is acceptable only as a separate behavior-preserving move with tests, import checks and rollback evidence. Do not move files merely to make the directory tree look uniform.
+This is a logical target, not a mandate to import CPM before the Machine Habit package and episode contracts are settled.
 
-## Context-to-habit feedback loop
+## 5. Context-to-habit flow
 
-A machine habit may declare references to skills or context packages it requires. The runtime asks CPM to resolve those references and records the returned manifest ID/digest. HabitRoute then executes only through its own authorized harness and flow worker. The independent verifier checks the required outcome. Experiment records can test whether the selected context actually improved correctness or total cost.
+1. The host submits a task and its available context references.
+2. The habit decides whether it applies and what observations/context it needs.
+3. The habit may use CPM or another context capability to resolve those needs.
+4. It records the returned context manifest ID/digest, source, accounting method and freshness.
+5. The habit selects and composes capabilities under its own outcome contract and policy.
+6. The host harness enforces actual authority for the episode.
+7. Independent verification checks the result; the episode records outcomes and cost.
+8. The habit may later use verified experience to propose an update.
 
-This is a research hypothesis, not an established capability. A context item being loaded does not prove it contributed to success. Fewer operations do not prove lower total cost or preserved quality.
+A context item being loaded does not prove it contributed to success. A smaller context footprint does not prove lower provider-reported token use or preserved quality.
 
-## Execution policy for the first integrated release
+## 6. CPM import constraints
 
-Start with **read-only composition and dry-run planning**. Do not allow a composed multi-step side-effecting habit until HabitRoute's per-operation checkpoint and external-effect recovery gaps are closed with crash-injection evidence.
+Retain the existing CPM v0.5.0 source pin, package names, CLI entry points, upstream tests and provenance review from CPM_INTEGRATION_PLAN.md. Exclude machine-specific runtime state and caches. Check every imported skill, dependency and artifact license/notice. Treat the declared MIT metadata as an assertion to verify, not a substitute for source provenance.
 
-## Explicit non-goals
+The original CPM verification findings remain relevant: container isolation was not proven, fixture quality was not a live semantic evaluation, and byte-count savings were not provider-reported token savings.
 
-- Rewriting CPM or HabitRoute.
-- A shared mutable memory database.
-- Direct CPM-to-HabitRoute imports.
-- General autonomous execution or broad provider integrations in the first milestone.
-- Claiming distributed workflow guarantees from a local JSONL journal.
-- Claiming quality parity, token savings or joint optimization without suitable measurements.
+## 7. First integration mode
 
-## Decision consequences
+Begin with read-only context resolution and explainable dry-run composition. The first reference habit must demonstrate complete repertoire and episode contracts before a general side-effecting unified runtime is built.
 
-- HabitRoute is the host repository.
-- CPM v0.5.0 is the initial CPM source pin; preserve both `contextpm` and `cheg` packages and their CLI entry points.
-- The repository license is MIT as of this decision. The CPM distribution also declares MIT in its package metadata; keep component provenance and attribution visible.
-- The existing synthetic route experiment remains a legacy benchmark and is not silently converted into a machine-tool benchmark.
-- Every migration stage gets a source pin, diff, test report and rollback path.
+No integration is considered complete without:
+- independent operation when CPM is absent;
+- independent operation of CPM when HabitRoute is absent;
+- public-contract-only integration tests;
+- pinned source and dependency manifests;
+- exact context/capability provenance per episode;
+- host permission-denial tests;
+- evidence that context and capability choices improve outcomes on matched cases.
+
+## 8. Decision consequences
+
+- HabitRoute remains the host repository.
+- CPM is a capability provider, not the owner of habit context judgement.
+- The habit decides what context it needs and when/how to request it.
+- Package and store separation remains a deployment choice.
+- The existing synthetic route experiment remains unchanged and limited to its tested conditions.
+- No automatic side-effecting composition is permitted before episode recovery, adapter authorization and independent verification gates pass.

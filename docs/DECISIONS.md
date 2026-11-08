@@ -1,81 +1,119 @@
 # Decisions and open questions
 
-New evidence may supersede a decision, but the reason and affected experiments must remain visible.
+New evidence may supersede a decision. Superseded decisions remain visible with their original rationale and affected implementation history.
 
 ## D-001 — Preserve the experiment as a separate baseline
 
 **Status: accepted**
 
-Keep the executable synthetic research harness under `experiments/step_savings_v1/`. Do not rewrite its behavior while building the machine-habit core.
+Keep the executable synthetic research harness under experiments/step_savings_v1/. Do not rewrite its behavior while building the broader machine-habit system.
 
 ## D-002 — Preserve usage utility as the legacy default
 
-**Status: accepted**
+**Status: accepted for the legacy experiment**
 
-The existing experiment keeps `policy="utility"` as its default. Step-savings remains opt-in because gains are not uniform across capacity and repeated-change conditions.
+The existing experiment keeps usage utility as its default. Step-savings remains an opt-in capacity policy because gains are not uniform across capacity and repeated-change conditions. Do not extrapolate that policy into a universal habit selector.
 
 ## D-003 — Machine habits are execution optimizations, not skills
 
-**Status: accepted; canonical**
+**Status: superseded by proposed D-012**
 
-A machine habit is a reusable, verified operation pattern that improves efficiency while preserving required outputs, postconditions and operational constraints. Human habit psychology and RL option/skill terminology are not the product foundation.
+The prior decision defined a habit as a reusable operation pattern. That model was too narrow: it explicitly excluded skills, knowledge, situation awareness, composition and the broader operating system. Preserve the original implementation and experiment as a historical foundation, not as the complete product definition.
 
 ## D-004 — Separate habits, harnesses and persistent flows
 
-**Status: accepted; canonical**
+**Status: superseded by proposed D-012 and D-014**
 
-Habit = reusable optimized pattern. Harness = controlled execution and verification boundary. Persistent flow = durable orchestration definition and run state. A flow invokes habits through a harness; none of the three substitutes for the others.
+The prior separation incorrectly made the habit only a reusable pattern while placing execution progress and supporting capabilities outside it. The useful technical boundaries remain: host permissions, adapters, workflow mechanics and storage can be replaceable. Their implementation boundaries must not fragment the habit's logical ownership of behaviour and episodes.
 
 ## D-005 — Efficiency is a gated claim
 
-**Status: accepted; canonical**
+**Status: accepted; extended by proposed D-012**
 
-Fewer steps alone does not prove efficiency. Promotion requires comparable baseline/candidate work, passing output/postcondition checks, bounded quality regression and improvement in a declared cost dimension. Other costs remain separately visible.
+Fewer steps or calls alone do not prove improvement. Promotion requires the outcome contract and safety constraints to pass, independent verification, reliability within declared tolerances and improvement in a predeclared cost objective on comparable cases. Report quality and cost dimensions separately.
 
 ## D-006 — Persistent progress is separate from reusable procedures
 
-**Status: accepted; canonical**
+**Status: superseded by proposed D-014**
 
-Persistent flow definitions are immutable/versioned; run instances pin a definition version and record exact habit versions. Habits do not own long-lived progress.
+Definitions and releases must remain immutable and separate from mutable execution episodes. However, the episode is logically owned by the habit whose behaviour it records. A generic flow engine may implement event storage and recovery; it does not own the habit's semantic identity, policy or episode lineage.
 
 ## D-007 — Side-effect retries require idempotency or compensation
 
-**Status: accepted; canonical**
+**Status: accepted**
 
-A durable journal cannot by itself guarantee exactly-once effects in an external system. Operations must be classified and retried only under a documented idempotency, deduplication or compensation contract.
+A durable journal cannot by itself guarantee exactly-once effects in an external system. Operations must be classified and retried only under a documented and verified idempotency, deduplication or compensation contract. Unknown non-repeatable outcomes require reconciliation or escalation.
 
-## D-008 — Existing option-oriented prototype is non-canonical
+## D-008 — Preserve the option-oriented prototype as historical research
 
 **Status: accepted**
 
-The prior `contracts.py` / `execution.py` files and their tests are preserved as a research prototype. They are not the definition of a HabitRoute machine habit. New development uses machine-operation and persistent-flow abstractions.
+The prior contracts.py and execution.py files and their tests remain available for research comparison. They are not the full definition of a Machine Habit. Their useful concepts may be re-evaluated when supported by evidence.
 
 ## D-009 — HabitRoute is the host repository for CPM integration
 
-**Status: accepted; preparation branch**
+**Status: accepted as repository direction; product boundaries superseded by proposed D-013**
 
-Evolve the existing `Loofy147/HabitRoute` repository into the modular monorepo. Do not create a new repository as the first integration step. Preserve current HabitRoute package behavior and import CPM as a separate, independently installable distribution. See [UNIFIED_RUNTIME_DECISION.md](UNIFIED_RUNTIME_DECISION.md).
+Evolve the existing Loofy147/HabitRoute repository into the modular monorepo. Preserve CPM as independently installable where practical. CPM can provide context and package-management capabilities to a habit; it does not own the habit's purpose, context judgement, operating strategy or identity.
 
 ## D-010 — Keep CPM and HabitRoute responsibilities and stores independent
 
-**Status: accepted; canonical integration constraint**
+**Status: superseded by proposed D-013**
 
-CPM owns context selection, progressive disclosure, budgeting, retrieval and context cache. HabitRoute owns machine habits, harness policy and persistent flows. The runtime coordinates them through versioned contracts. No circular imports; no shared mutable memory store.
+Independent package boundaries and stores remain valid implementation choices. The prior semantic boundary was too restrictive: HabitRoute must own its context needs and decide when/how to use a context capability such as CPM. CPM may provide retrieval, packaging, budgeting and cache mechanisms. Package separation does not mean the capability is external to the habit's governed repertoire.
 
 ## D-011 — MIT license for HabitRoute repository
 
-**Status: accepted; preparation branch**
+**Status: accepted**
 
-Select MIT for the repository, effective in this preparation branch. The package metadata and root `LICENSE` must agree. Imported components and dependencies still require provenance and compatibility review; a repository-level license does not override third-party terms.
+The repository-level MIT license remains in effect. Imported components and dependencies require their own provenance, license and notice review; the repository license does not override third-party terms.
+
+## D-012 — The Machine Habit is the integrated unit of operating behaviour
+
+**Status: proposed; pending review**
+
+A Machine Habit is a durable, versioned operational system that owns its purpose, outcome contract, situation awareness, governed capability and knowledge repertoire, operational judgement, minimal-sufficient composition, strategies, execution episodes, memory, verification, learning, governance and portability. Skills, tools, models, frameworks, scripts, APIs, data, services and sub-habits are components of its repertoire, whether embedded or referenced. No individual component is the whole habit.
+
+## D-013 — Capability ownership is logical, not necessarily physical
+
+**Status: proposed; pending review**
+
+A habit owns the manifest, purpose, applicability, compatibility, use policy, provenance, configuration and lifecycle of each capability it relies on. Assets can be bundled, referenced, installed or remotely provided. The habit decides what it needs and when/how to use it. Shared infrastructure such as CPM can implement a capability without becoming the owner of the habit's behaviour.
+
+## D-014 — Habit Episodes own durable progress
+
+**Status: proposed; pending review**
+
+Each execution creates a Habit Episode tied to an exact immutable habit release and pinned strategy/capability versions. The episode owns situation, decisions, operation intent/results, checkpoints, retries, waits, recovery, evidence and terminal outcome. A generic workflow engine or event store may implement episode mechanics, but the habit owns their semantic lineage. Cross-habit workflows may coordinate episodes without replacing them.
+
+## D-015 — Compose the smallest sufficient capability set
+
+**Status: proposed; pending review**
+
+A habit should use the smallest eligible and validated set of repertoire components that can satisfy the outcome contract. Hard quality, safety, reliability and coverage constraints precede cost minimization. Neither step count nor tool count is a sufficient optimization objective.
+
+## D-016 — Host authority remains authoritative
+
+**Status: proposed; pending review**
+
+A habit may declare and request the narrow capabilities needed for an episode, but actual credentials, sandboxing, approvals, egress, quotas and side-effect authority remain enforced by the host execution boundary. A habit cannot widen its own permissions or treat its internal policy as a security boundary.
+
+## D-017 — Whole-habit learning is controlled and reversible
+
+**Status: proposed; pending review**
+
+Episodes provide experience, not automatic proof. Candidate changes to repertoire, procedures, policies, memory and composition must be evaluated against independent outcome evidence, matched and held-out cases, and explicit safety/quality gates. Active releases remain immutable. Promotion, rollback, quarantine, revocation and retirement are explicit.
 
 ## Open questions
 
-- Which trace normalization and similarity features best identify reusable machine-operation patterns?
-- How much paired evidence is needed to promote an optimization for each cost/risk class?
-- Which harness contracts are common across APIs, CLIs, repositories, agents and local scripts?
-- Which flow journal/store guarantees are required: local single-writer, transactional SQL, event store, or external durable workflow engine?
-- What is the correct recovery protocol when an external side effect may have succeeded but its acknowledgement was lost?
-- How should habits be invalidated when an API, schema, tool, credential scope, dependency or environment changes?
-- Which costs should be hard constraints and which can be traded off?
-- Should HabitRoute own the durable flow runtime or integrate with Temporal, Step Functions, Camunda or another provider through adapters?
-- What exact task/context/habit evidence relationship is sufficient to establish that a context selection contributed to a successful execution?
+- What minimum package manifest is sufficient to reproduce a habit's identity and behaviour across runtimes?
+- Which capability classes need executable adapters versus declarative assets?
+- What is the smallest useful common input/output and authority contract for heterogeneous capabilities?
+- How should a habit decide whether to inspect more, reuse evidence, invoke a model or abstain?
+- Which parts of declarative, procedural, semantic and episodic memory should be stored together, and which should use separate backends?
+- What evidence links a context/capability choice causally to a successful outcome?
+- How should the system detect context drift, capability degradation and stale memory before a failure?
+- What are the episode and event consistency guarantees required for local, transactional and distributed execution?
+- Which existing workflow, memory and decision systems should be integrated rather than reimplemented?
+- What benchmark can establish improvement over a strong skill-equipped host agent and persistent-agent baseline?
+- What degree of cross-harness portability can be proven, and which bindings must be revalidated?
