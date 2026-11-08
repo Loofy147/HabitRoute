@@ -241,7 +241,11 @@ It does not run every tool on every change. It composes a minimal sufficient ver
 
 The episode stores the exact commit/context, selected checks, capability versions, commands/API requests, outputs, checkpoints and independent verdict. Across episodes, the habit can learn which checks are predictive and which are wasteful, but only promotes changes after testing on matched and held-out repository cases. This is a design specimen, not an implemented or runtime-enforced habit.
 
-## 10. Relation to existing HabitRoute work
+## 10. Relation to the existing hand-designed reference habit
+
+The repository-change-verification v1 design on open PR #4 is the first real specimen to map to this architecture. It already contains a strong read-only outcome contract, decision points, validation matrix, safe-skip rules, immutable evidence and later independent revalidation. The v0.3 extension points are its governed capability manifest, typed situation frame, explicit capability composition, habit-owned episode lineage, typed memory and whole-habit evolution. See [Reference Habit v0.3 mapping](REFERENCE_HABIT_REPOSITORY_VERIFICATION_V0.3.md). PR #4 remains an unmerged design branch; its schemas do not establish runtime enforcement.
+
+## 11. Relation to existing HabitRoute work
 
 The existing core is an operation-pattern prototype with a harness contract, executor and persistent-flow journal. The synthetic step-savings experiment is an early study of route memory, retention, capacity and adaptation. Both remain valuable evidence and implementation material.
 
