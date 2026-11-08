@@ -1,3 +1,5 @@
+**Historical design notice (2026-11-08):** This document records the earlier v0.2 operation-pattern model. It is retained for provenance and reusable engineering details, but it is no longer the canonical product definition. The proposed integrated model is [Machine Habit Model v0.3](MACHINE_HABIT_MODEL_V0.3.md), with topology in [Architecture](ARCHITECTURE.md) and prior-art analysis in [Research Reassessment v0.3](RESEARCH_REASSESSMENT_V0.3.md). Do not interpret the older separation of habit, harness and flow as the v0.3 ownership model.
+
 # HabitRoute research: machine execution, harnesses and durable flows
 
 **Research date:** 2026-11-04  
