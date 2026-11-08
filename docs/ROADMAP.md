@@ -1,95 +1,132 @@
-# Roadmap
+# Roadmap — integrated Machine Habit v0.3
 
-This roadmap separates the existing HabitRoute core from the broader Unified Agent Runtime integration. Checkboxes reflect the inspected 2026-11-06 snapshot; future completion requires evidence.
+**Date:** 2026-11-08  
+**Status:** proposed sequence; all future checkboxes require commit- and run-level evidence  
+**Base reviewed:** main at e57e86afa12757223b9dada4ff191b496ece6c1f
 
-## P0 — Preserve and reproduce existing research
+This roadmap supersedes the previous operation-pattern-first plan. It preserves useful code and experiments but does not assume that the current narrow core is the finished product.
+
+## P0 — Preserve evidence and establish the baseline
 
 - [x] Preserve the synthetic step-savings experiment and reports.
-- [x] Preserve legacy usage-utility and step-savings policies.
-- [ ] Add complete raw per-seed artifacts and a reproducibility manifest.
-- [ ] Verify the experiment from a clean clone.
+- [x] Preserve usage-utility and step-savings policies as separate experimental controls.
+- [ ] Commit complete raw per-seed outputs and a reproducibility manifest.
+- [ ] Reproduce the experiment from a clean clone.
+- [ ] Record current main, open PR heads, test runs and code-to-documentation drift in a baseline snapshot.
 
-## P1 — Machine-habit model
+**Gate:** historical results stay attached to exact code, configuration, seeds and environment. Synthetic results are not described as production agent performance.
 
-- [x] Correct the product definition: machine execution optimization, not human habits or RL skills.
-- [x] Separate Machine Habit, Execution Harness and Persistent Flow.
-- [x] Define scope, triggers, operation patterns, postconditions, idempotency and baseline comparison.
-- [x] Implement the dependency-free MachineHabit model and harness authorization.
-- [x] Implement the adapter-driven machine-habit executor.
-- [x] Implement aggregate efficiency evaluation using cohort labels and Wilson reliability lower bounds.
-- [x] Add tests for scope, trigger, preconditions, approvals, side-effect semantics and efficiency-gate behavior.
+## P1 — Settle the Machine Habit product model
 
-**Gate:** no habit may be activated unless its declared correctness and efficiency gates pass. Independent raw paired-trial evidence remains future work.
+- [x] Inspect the existing canonical definition, code, experiments and unmerged durability work.
+- [x] Reassess relevant prior art and the novelty boundary.
+- [x] Draft the integrated Machine Habit Model v0.3.
+- [x] Draft the research reassessment and comparative-test requirements.
+- [x] Draft the revised architecture, decisions and roadmap on an isolated branch.
+- [ ] Review and accept/revise the v0.3 model.
+- [ ] Resolve the superseded definitions and all documentation contradictions.
+- [ ] Define a compact glossary and stable vocabulary for habit, release, repertoire, capability, situation, strategy, episode, memory and evidence.
 
-## P2 — Persistent flow and worker foundation
+**Gate:** one unambiguous definition of what the habit owns, what it may reference, what the host enforces, and what constitutes durable behaviour.
 
-- [x] Define immutable flow definitions and version-pinned run instances.
-- [x] Add append-only JSONL events, deterministic replay and sequence validation.
-- [x] Add local single-writer journal with fsync.
-- [x] Add pause/resume, wait release, branch, bounded retry, cancellation and needs-attention states.
-- [x] Define operation-effect classes and stable idempotency keys.
-- [x] Implement a worker that dispatches operation nodes and exact-version habit nodes through a HarnessAdapter.
-- [x] Add worker tests for success, retry-key reuse, approval pause/resume, unknown outcomes, postcondition failure and exact-version habit lookup.
-- [ ] Commit a durable event/checkpoint after each operation inside a multi-operation habit.
-- [ ] Add fault injection after external side effects but before event acknowledgement.
+## P2 — Specify one complete reference habit before generalizing
 
-**Gate:** ordinary flow state replays from committed events; per-operation durability for multi-step habits remains an open critical gate.
+Use repository change verification as the first specimen.
 
-## P3 — Harness enforcement and recovery
+- [ ] Define its purpose, outcome contract, in-scope and out-of-scope situations.
+- [ ] Define situation inputs, context provenance, freshness and risk classification.
+- [ ] Inventory its governed repertoire: Git, file readers, tests, linters, type checkers, CI, dependency/license/security checks, reusable skills and optional model services.
+- [ ] Define capability manifests, adapters, versions, compatibility and permission requirements.
+- [ ] Design routine, deliberative, fallback, recovery and maintenance behaviour.
+- [ ] Define minimal-sufficient composition rules and abstention conditions.
+- [ ] Define a complete Habit Episode and memory/evidence contract.
+- [ ] Specify what can be reused and exactly when cached or prior verification evidence is invalid.
+- [ ] Create adversarial and changed-context cases before implementing the habit.
 
-- [x] Define provider-neutral HarnessAdapter protocol and typed operation outcomes.
-- [x] Add contract-level allowlist, approval and attempt checks.
-- [ ] Add actual provider-backed credential boundaries, egress controls, hard budgets, timeouts, cancellation and output limits.
-- [ ] Add independent environment/capability fingerprinting.
-- [ ] Add durable idempotency/deduplication or provider reconciliation.
-- [ ] Implement and test compensation before enabling compensatable operations.
-- [ ] Add deterministic test harness and crash-window fault injection.
-- [ ] Add at least one concrete read-only external adapter.
+**Gate:** a reviewer can determine the habit's behaviour from its contract without relying on an implicit general-purpose agent prompt.
 
-**Gate:** a harness control is only marked enforced after deny-path tests prove the provider boundary rejects prohibited actions.
+## P3 — Define the package, repertoire and episode contracts
 
-## P4 — Evidence-backed habit discovery and promotion
+- [ ] Define immutable HabitRelease manifest and content/dependency digests.
+- [ ] Define capability type, identity, contract, version, provenance, trust, licensing, compatibility, cost and side-effect metadata.
+- [ ] Define embedded, referenced, locally installed and remotely provided capability semantics.
+- [ ] Define SituationFrame and freshness/invalidation rules.
+- [ ] Define strategy/composition and policy contracts.
+- [ ] Define append-only HabitEpisode events, operation intent/result records and checkpoints.
+- [ ] Define declarative, procedural, semantic and episodic memory records.
+- [ ] Define independent EvidenceBundle and EvaluationReport.
+- [ ] Define import/export and host-binding compatibility checks.
 
-- [ ] Ingest operation traces with immutable provenance.
-- [ ] Normalize repeated operations and parameter bindings.
-- [ ] Discover repeated subflows, redundant calls and reusable patterns.
-- [ ] Propose narrow candidates with explicit triggers/preconditions.
-- [ ] Store raw paired baseline/candidate trial records and exact input/case digests.
-- [ ] Independently verify outputs and side effects.
-- [ ] Add shadow evaluation, staged promotion, monitoring, drift detection and quarantine.
-- [ ] Make a durable exact-version HabitRegistry.
+**Gate:** schema tests reject missing provenance, unpinned dependencies, unresolved authority, invalid episode lineage and ambiguous recovery state.
 
-**Gate:** mutation-tested promotion cannot pass on empty, incomplete, mismatched or unverified evidence.
+## P4 — Implement the durable habit runtime incrementally
 
-## P5 — Expand machine-operation economics research
+- [ ] Keep existing operation-pattern and flow code as a compatibility layer until mapped or migrated.
+- [ ] Map PR #8's per-operation checkpoint design to HabitEpisode events; preserve its crash/reconciliation tests where still applicable.
+- [ ] Implement durable HabitRelease registry and capability manifest resolution.
+- [ ] Implement a dry-run situation-to-composition path with explainable capability selection.
+- [ ] Implement one read-only capability adapter and prove host-denial paths.
+- [ ] Implement HabitEpisode persistence and crash/restart recovery.
+- [ ] Add dependency/harness/environment drift refusal and safe fallback.
+- [ ] Add bounded approval, needs-attention and abstention paths.
+- [ ] Do not enable broad side effects before provider-specific idempotency/reconciliation is proven.
 
-- [ ] Keep the legacy route simulator unchanged as its own baseline.
-- [ ] Add machine-operation experiments for calls, latency, resource usage, retries and recovery overhead.
-- [ ] Test regime/schema/provider/harness changes and revalidation.
-- [ ] Compare retrieval, context assembly and verification overhead against savings.
-- [ ] Include paired uncertainty and pre-registered analysis.
+**Gate:** a habit can be exported, loaded, inspected, run in dry-run/read-only mode, interrupted, recovered and independently verified without changing its meaning or authority.
 
-## P6 — Unified Agent Runtime integration
+## P5 — Build memory and whole-habit learning
 
-- [ ] Import CPM v0.5.0 under `packages/contextpm/`, preserving `contextpm` and `cheg`.
-- [ ] Keep CPM and HabitRoute independently installable and free of circular imports.
-- [ ] Freeze shared contracts under `shared/contracts/`.
-- [ ] Add runtime composition under `runtime/unified_agent_runtime/`.
-- [ ] Start with read-only context-to-habit planning and explainable dry-run output.
-- [ ] Pin package/source versions and context manifest digests per run.
-- [ ] Add component-absence tests proving each package works alone.
-- [ ] Benchmark context-only, habit-only and combined factorial conditions.
+- [ ] Ingest real episode traces with provenance and outcome labels.
+- [ ] Separate raw episodes from consolidated memories and active procedures.
+- [ ] Discover repeated patterns, capability gaps, failures, unnecessary operations and stale assumptions.
+- [ ] Create candidate updates to repertoire, policies, strategies and memory.
+- [ ] Evaluate changes on matched and held-out cases, including context shifts.
+- [ ] Add shadow/canary promotion, rollback, quarantine, revocation and retirement.
+- [ ] Mutation-test learning and promotion gates against incomplete, mismatched or self-asserted evidence.
+- [ ] Ensure an active release is never mutated in place.
 
-**Gate:** no side-effecting combined execution until P2/P3 critical durability and recovery tests pass.
+**Gate:** the habit improves whole-task outcomes without silently broadening authority, retaining stale procedures or rewarding its own unsupported success claims.
 
-## P7 — Release readiness
+## P6 — Comparative and longitudinal evaluation
 
-- [ ] SBOM, dependency/license scan and provenance record.
-- [ ] Security review and permission-denial tests for every adapter.
+- [ ] Compare a plain host agent, static skill package, tool-enabled agent, prior HabitRoute core and integrated habit.
+- [ ] Use paired cases, controlled seeds, held-out environments and reproducible provenance.
+- [ ] Measure accuracy, quality, safety, task completion and outcome reliability.
+- [ ] Measure capability-selection precision/recall and unnecessary capability use.
+- [ ] Measure latency, tool/model calls, tokens, context/retrieval, compute, external spend, memory and total recovery cost separately.
+- [ ] Test long-running adaptation, stale memory, provider changes, schema changes, capability failures and cross-harness migration.
+- [ ] Run component ablations to establish whether each subsystem adds measurable value.
+- [ ] Publish negative results and conditions where the habit should fall back or abstain.
+
+**Gate:** claims about efficiency, accuracy, durability, transfer or differentiation are limited to measured cases and uncertainty.
+
+## P7 — Host, CPM and ecosystem integration
+
+- [ ] Reconcile the CPM import plan with the v0.3 ownership model.
+- [ ] Treat CPM as a selectable context-management capability; the habit owns context requirements and use policy.
+- [ ] Keep CPM independently installable and preserve its source/license provenance.
+- [ ] Integrate at least two distinct host/harness environments through adapters.
+- [ ] Validate exact capability versions and permission boundaries in each host.
+- [ ] Prove that missing or changed optional components cause safe degradation, not silent behaviour drift.
+- [ ] Add a habit export/import test to a second compatible environment.
+
+**Gate:** portability is demonstrated by measured compatibility and preserved behaviour, not by claiming a generic interface.
+
+## P8 — Release and production readiness
+
+- [ ] Dependency, license and provenance inventory (SBOM where appropriate).
+- [ ] Security and threat-model review for repertoire loading and capability execution.
+- [ ] Provider-specific credentials, egress, sandbox, budgets, cancellation and output limits.
 - [ ] Crash/restart, duplicate delivery, reconciliation and rollback evidence.
-- [ ] CI matrix and integration tests for supported Python versions.
-- [ ] Deployment-specific operational review; do not label the entire project production-ready without scope-specific evidence.
+- [ ] CI matrix, schema compatibility tests and migration tests.
+- [ ] Operational monitoring for capability drift, stale memory, failure rates and cost regressions.
+- [ ] Publish only the supported scope; do not label the entire system production-ready without deployment-specific evidence.
 
-## Immediate next task
+## Immediate next sequence
 
-Begin with per-operation checkpoints and crash/recovery semantics in HabitRoute. In parallel, import CPM unchanged into the monorepo only after its source manifest and notices are reviewed. Do not build an autonomous side-effecting runtime before the durability gate passes.
+1. Review the proposed v0.3 model and accept or revise its ownership boundaries.
+2. Specify the repository-verification habit as a full package with repertoire, situation model, composition, episode and evaluation contract.
+3. Design the schemas from that specimen.
+4. Map current operation/harness/flow code and PR #8 into the new model.
+5. Only then implement the first end-to-end habit path.
+
+Do not expand into a general autonomous runtime before one complete habit demonstrates reliable, durable behaviour.
