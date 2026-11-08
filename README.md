@@ -1,62 +1,70 @@
 # HabitRoute
 
-**Efficient machine habits, controlled by harnesses, carried by persistent flows.**
+**Durable machine habits: self-contained operating behaviour with a governed repertoire.**
 
-HabitRoute is a research-to-engineering project for discovering, verifying, optimizing and reusing recurring machine-operation patterns. A machine habit is not a human habit and not an RL skill: it is an execution pattern that must preserve required results while reducing a measured cost.
+HabitRoute is a research-to-engineering project for building Machine Habits: durable operational systems that know how to respond to recurring classes of situations. A habit carries its purpose, situational judgement, knowledge, skills, tools, frameworks, models, procedures, execution strategies, memory, verification and learning lifecycle as one governed behavioural unit.
 
-## Canonical model
+A habit uses the relevant small parts of its repertoire to produce an accurate result. It does not invoke every available capability or optimize step count at the expense of correctness, quality or safety.
 
-- **Machine Habit:** reusable optimized operation pattern with triggers, inputs, preconditions, steps, postconditions, side-effect semantics and baseline-vs-candidate efficiency evidence.
-- **Execution Harness:** controlled environment wrapper for capabilities, approvals, budgets, operation invocation, validation, tracing, idempotency and recovery.
-- **Persistent Flow:** versioned orchestration definition and version-pinned run instance with events, checkpoints, branches, waits, retries, pause/resume and recovery.
+## Proposed canonical model
 
-A flow owns progress. A habit owns reuse/optimization. A harness owns the execution boundary. See [the machine-habit and flow architecture](docs/MACHINE_HABITS_AND_FLOWS.md).
+The proposed v0.3 architecture is documented in [Machine Habit Model v0.3](docs/MACHINE_HABIT_MODEL_V0.3.md). The model is a documentation-first proposal pending review and implementation.
 
-## Current implementation
+- **Purpose and outcome contract:** what the habit is responsible for achieving and what must never be violated.
+- **Situation awareness:** what is happening, where, when, with what context, uncertainty and risk.
+- **Governed repertoire:** skills, tools, scripts, APIs, frameworks, models, services, data, procedures and sub-habits, embedded or referenced with version, compatibility and provenance.
+- **Operational judgement and composition:** when, why and how to use a capability, and how to combine the smallest sufficient set.
+- **Durable execution:** strategies and Habit Episodes with decision history, operation records, checkpoints, recovery and outcomes.
+- **Memory and experience:** procedural, declarative, semantic and episodic knowledge with scope, provenance and freshness.
+- **Verification and evolution:** independent outcome checks, evidence-backed improvement, immutable releases, rollback and retirement.
+- **Governance and portability:** explicit permissions, dependency contracts and host/runtime compatibility.
 
-- `src/habitroute/machine.py` — machine-habit model, harness profile, operation-effect semantics, authorization, aggregate efficiency gate and adapter-driven habit executor.
+A host harness remains authoritative for actual credentials, sandboxing, approvals and side-effect permissions. A habit owns its capability-use behaviour but cannot expand its own authority.
+
+## Current implementation is narrower than the proposed model
+
+The current code is a useful foundation, not the complete v0.3 system:
+
+- `src/habitroute/machine.py` — operation-pattern model, harness profile, effect semantics, authorization and adapter-driven executor.
 - `src/habitroute/flows.py` — versioned flow definitions, event reducer, persistent run controller and local append-only JSONL journal.
-- `src/habitroute/worker.py` — one-node-per-dispatch worker for operation and exact-version habit nodes, backed by the harness adapter and exact-version in-memory registry.
-- `src/habitroute/contracts.py` and `execution.py` — earlier RL-style route/option prototype retained for historical comparison; not canonical.
-- `experiments/step_savings_v1/` — preserved synthetic transition-route and step-savings experiment.
+- `src/habitroute/worker.py` — worker for operation and exact-version habit nodes.
+- `src/habitroute/contracts.py` and `execution.py` — earlier RL-style route/option prototype retained for comparison.
+- `experiments/step_savings_v1/` — synthetic experiment on route memory, retention, capacity, pruning and adaptation.
 
-The worker exists, but it is not a distributed workflow service and its multi-operation habit path does not yet commit an individual flow checkpoint for each completed operation. See [core status](docs/CORE_STATUS.md) and the [repository assessment](docs/HABITROUTE_ASSESSMENT.md).
+The existing model does not yet implement the complete repertoire, situation intelligence, minimal-sufficient composition, habit-owned episode lifecycle, portable capability bindings or whole-habit evolution. See [Core Status](docs/CORE_STATUS.md).
 
 ## Research and design
 
-- [Machine habits, harnesses and persistent flows](docs/MACHINE_HABITS_AND_FLOWS.md)
-- [Machine Habit Specification v0.2](docs/HABIT_SPEC_v0.1.md) — canonical content; filename retained from the initial research branch.
-- [Research review](docs/HABIT_MODEL_RESEARCH.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Contradictions in the legacy route experiment](docs/CONTRADICTIONS_AND_GAPS.md)
-- [Core status](docs/CORE_STATUS.md)
-- [Roadmap](docs/ROADMAP.md)
-- [Decisions](docs/DECISIONS.md)
-- [Repository Study and Technical Assessment](docs/HABITROUTE_ASSESSMENT.md)
+- [Machine Habit Model v0.3](docs/MACHINE_HABIT_MODEL_V0.3.md) — proposed behavioural system model.
+- [Research Reassessment v0.3](docs/RESEARCH_REASSESSMENT_V0.3.md) — human habit analogy, prior art, evidence boundaries and comparative benchmark.
+- [Architecture](docs/ARCHITECTURE.md) — runtime and component topology.
+- [Decisions](docs/DECISIONS.md) — accepted historical decisions and proposed superseding decisions.
+- [Roadmap](docs/ROADMAP.md) — revised research and implementation gates.
+- [Previous machine-habit and flow model](docs/MACHINE_HABITS_AND_FLOWS.md) — historical v0.2 design; some durability mechanisms remain useful.
+- [Previous Machine Habit Specification](docs/HABIT_SPEC_v0.1.md) — historical file containing v0.2 specification.
+- [Previous research review](docs/HABIT_MODEL_RESEARCH.md) — earlier scope, superseded by the new reassessment.
+- [Unified Agent Runtime decision](docs/UNIFIED_RUNTIME_DECISION.md) — CPM and host integration boundaries.
+- [Repository assessment](docs/HABITROUTE_ASSESSMENT.md).
 
-## Unified Agent Runtime direction
+## Existing experiment: evidence and limits
 
-The accepted direction is to evolve this repository into a modular monorepo hosting HabitRoute and Context Package Manager (CPM). CPM owns context selection and context-cache concerns; HabitRoute owns machine habits, harness authorization and persistent execution. A thin runtime will compose them through versioned, provider-neutral contracts. Neither package will import the other, and their stores remain separate.
+The synthetic step-savings experiment compared usage-based retention with a counterfactual step-savings policy in 12-state and 24-state worlds. It supports a limited claim: retaining useful routes can outperform frequency-only retention in some capacity-constrained settings. The result is not universal, and repeated environment changes expose adaptation trade-offs. The report uses eight paired seeds and descriptive comparisons, not formal significance tests.
 
-This is an architecture decision and preparation effort—not a claim that CPM is already integrated. See [the decision record](docs/UNIFIED_RUNTIME_DECISION.md), [CPM integration plan](docs/CPM_INTEGRATION_PLAN.md), and [migration plan](docs/MIGRATION_PLAN.md).
+It does not prove real API/tool savings, cross-harness portability, general agent learning or durable external execution. Preserve it as an early experiment, not as validation of the full Machine Habit model.
 
-## Verification principle
+Primary result: [step-savings report](experiments/step_savings_v1/RESULTS_REPORT.md).
 
-A habit is not promoted because it is shorter. Baseline and candidate must use a comparable input cohort and harness; output/postcondition reliability must be preserved within a declared tolerance; and at least one predeclared cost metric must improve. Other costs and quality measures remain visible.
+## Unified runtime and CPM
 
-## Persistent execution principle
+The intended monorepo can include HabitRoute, Context Package Manager (CPM) and a thin host/runtime integration. Under the v0.3 model, CPM is one possible context-management capability in a habit's governed repertoire. The habit decides what context it needs and when to request it; CPM can provide package resolution, retrieval, progressive disclosure, budgeting and caching. CPM does not own the habit's operating judgement or identity.
 
-The local flow journal is append-only and fsyncs events before the in-memory flow state advances. It uses a single-writer-per-run contract. This does not guarantee exactly-once external side effects: operation adapters still require idempotency, deduplication, compensation or manual reconciliation according to their side-effect class.
+The packages may remain independently installable and use separate stores. This is an implementation boundary, not a separation of behavioural ownership. See [Unified Agent Runtime decision](docs/UNIFIED_RUNTIME_DECISION.md) and [CPM integration plan](docs/CPM_INTEGRATION_PLAN.md), which must be reconciled before implementation.
 
-## Legacy experiment evidence
+## Verification principles
 
-The original simulator studies 12-state and 24-state worlds, capacity-limited memory, audit, pruning, slips and rewiring. Its results remain experiment-specific; they do not demonstrate real API/tool workflow savings or crash-safe orchestration. Usage utility remains the default; step-savings is an opt-in policy.
+A habit is not better merely because it uses fewer steps or calls. A candidate must preserve the outcome contract and safety constraints, pass independent verification, and improve a predeclared cost objective on comparable cases. Latency, calls, tokens, context/retrieval, compute, external spend, retries, recovery and human intervention remain separately visible.
 
-## Verification status
-
-The latest observed GitHub Actions run is [41841168040](https://github.com/Loofy147/HabitRoute/actions/runs/41841168040), on commit `43d714c8760a15026e0acb966919f483d893e7d0`, completed successfully across Python 3.11, 3.12 and 3.13. The exact test count for that run was not captured. The often-quoted 77/77 result belongs to an earlier commit and is not presented as the latest count.
-
-## Install and test
+## Installation and tests
 
 ```bash
 python -m pip install -e .
@@ -65,6 +73,8 @@ python -m unittest discover -s tests -v
 ```
 
 Python 3.11+; core modules use the standard library only. The legacy simulator tests install NumPy separately.
+
+The current test status and exact repository baseline must be read from [Core Status](docs/CORE_STATUS.md) and the relevant GitHub Actions run. Do not reuse a historical test count as a current result.
 
 ## License
 
