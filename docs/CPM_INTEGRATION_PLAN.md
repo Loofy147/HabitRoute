@@ -1,3 +1,5 @@
+**Architecture note (2026-11-08):** This source-import plan is retained, but its former semantic boundary is superseded by [Machine Habit Model v0.3](MACHINE_HABIT_MODEL_V0.3.md). The habit owns context requirements and use policy; CPM is an optional repertoire capability. See also [the revised unified-runtime decision](UNIFIED_RUNTIME_DECISION.md).
+
 # Context Package Manager Integration Plan
 
 **Initial source:** CPM v0.5.0  
@@ -43,11 +45,11 @@ Do not add HabitRoute as a dependency of CPM. Do not make CPM import HabitRoute.
 6. Run upstream CPM tests unchanged before adding cross-package tests.
 7. Record the Python version, commands, exit status and test count in the migration evidence.
 
-## CPM responsibilities in the combined system
+## Revised CPM responsibility under Machine Habit Model v0.3
 
-CPM decides what context should be made available, in what level of detail, and under which budget/accounting method. Its output should be a versioned context manifest with IDs/digests and provenance.
+The Machine Habit owns its context requirements, situation model and decision about when/how to request context. CPM is a capability the habit may use to resolve package references, retrieve material, apply progressive disclosure, account for budgets and cache results. CPM returns versioned context manifests with IDs/digests and provenance; the habit records the exact manifest and decides how that context affects its strategy.
 
-The runtime may ask CPM to resolve HabitRoute-declared references such as skill IDs, knowledge package IDs or capability documentation. HabitRoute stores references and scope metadata, not duplicated skill bodies.
+CPM remains independently installable and may retain its own registry/cache stores. This is an implementation boundary, not a claim that context management is outside the habit's governed repertoire. The habit owns the use policy; CPM supplies the context-management implementation. The host still enforces access permissions and data boundaries.
 
 ## Accounting requirements
 
