@@ -212,10 +212,11 @@ class SituationFrame:
 
 @dataclass(frozen=True, slots=True)
 class HostCapabilitySnapshot:
-    """Host-attested capability availability and effective permission snapshot.
+    """Host-supplied exact capability versions and effective permission snapshot.
 
-    This is input to planning, not a mechanism for granting permissions. The
-    host remains responsible for producing an authentic snapshot and enforcing it.
+    available_capabilities contains capability_id@version references. This is
+    input to planning, not a mechanism for granting permissions. The host remains
+    responsible for producing an authentic snapshot and enforcing it.
     """
 
     harness_id: str
@@ -257,6 +258,7 @@ class OutcomeContract:
     required_outcomes: frozenset[str]
     required_inputs: frozenset[str]
     max_situation_age_seconds: int
+    permitted_effects: frozenset[OperationEffect] = frozenset({OperationEffect.READ_ONLY})
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -269,6 +271,7 @@ class OutcomeContract:
             raise ValueError("outcome contract requires at least one outcome")
         if self.max_situation_age_seconds < 1:
             raise ValueError("max_situation_age_seconds must be positive")
+        object.__setattr__(self, "permitted_effects", frozenset(self.permitted_effects))
 
 
 @dataclass(frozen=True, slots=True)
@@ -413,7 +416,7 @@ def compose_habit(
         reasons: list[str] = []
         if item.status is not CapabilityStatus.ACTIVE:
             reasons.append("capability_not_active")
-        if item.capability_id not in host.available_capabilities:
+        if item.version_ref not in host.available_capabilities:
             reasons.append("capability_unavailable_in_host")
         if situation.harness_ref not in item.compatible_harnesses:
             reasons.append("harness_incompatible")
@@ -427,6 +430,8 @@ def compose_habit(
                 reasons.append(f"situation_condition_mismatch:{key}")
         for permission in sorted(item.required_permissions - host.granted_permissions):
             reasons.append(f"host_permission_missing:{permission}")
+        if item.effect not in contract.permitted_effects:
+            reasons.append(f"effect_not_permitted_by_habit:{item.effect.value}")
         if item.effect not in host.allowed_effects:
             reasons.append(f"effect_not_authorized:{item.effect.value}")
         if not (item.provides & useful_facts):
@@ -595,6 +600,13 @@ def compose_habit(
             reason = "capability_limit_prevents_coverage"
         else:
             reason = "no_eligible_composition_satisfies_outcome_contract"
+        missing_runtime_inputs = frozenset(
+            reason.split(":", 1)[1]
+            for rejection in (rejected + diagnostics)
+            for reason in rejection.reasons
+            if reason.startswith("situation_input_missing:")
+            or reason.startswith("situation_condition_missing:")
+        )
         return CompositionPlan(
             habit_id=habit.habit_id,
             habit_version=habit.version,
@@ -603,7 +615,7 @@ def compose_habit(
             selected=(),
             covered_outcomes=required - missing,
             missing_outcomes=missing,
-            missing_inputs=frozenset(),
+            missing_inputs=missing_runtime_inputs,
             rejected=tuple(rejected + diagnostics),
             estimated_cost=empty_cost,
             primary_cost=primary,
