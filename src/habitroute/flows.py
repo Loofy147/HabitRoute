@@ -350,8 +350,12 @@ def apply_flow_event(
         context = snapshot.context_dict()
         context.update({key: value for key, value in payload.items() if not key.startswith("$meta.")})
         updated = replace(
-            snapshot, context=tuple(sorted(context.items())),
+            snapshot,
+            context=tuple(sorted(context.items())),
             completed_nodes=snapshot.completed_nodes + (node.node_id,),
+            habit_operation_index=0,
+            habit_operation_attempts=(),
+            pending_habit_operation=None,
         )
         updated = _settle_at_node(definition, updated, node.next_on_success)
     elif event.kind is FlowEventKind.STEP_FAILED:
@@ -365,11 +369,23 @@ def apply_flow_event(
         counts[node.node_id] = attempts
         updated = replace(snapshot, attempts=tuple(sorted(counts.items())))
         if attempts < node.max_attempts:
+            # Same flow node is being retried; preserve its operation cursor.
             updated = replace(updated, status=FlowStatus.RUNNING)
         elif node.next_on_failure is not None:
-            updated = _settle_at_node(definition, updated, node.next_on_failure)
+            updated = replace(
+                _settle_at_node(definition, updated, node.next_on_failure),
+                habit_operation_index=0,
+                habit_operation_attempts=(),
+                pending_habit_operation=None,
+            )
         else:
-            updated = replace(updated, status=FlowStatus.FAILED)
+            updated = replace(
+                updated,
+                status=FlowStatus.FAILED,
+                habit_operation_index=0,
+                habit_operation_attempts=(),
+                pending_habit_operation=None,
+            )
     elif event.kind is FlowEventKind.STEP_OUTCOME_UNKNOWN:
         if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
             raise ValueError("unknown outcome does not match current flow node")
