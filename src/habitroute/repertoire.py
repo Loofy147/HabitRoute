@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+import heapq
+import itertools
 import math
 from typing import Iterable
 
@@ -271,14 +273,17 @@ class OutcomeContract:
 
 @dataclass(frozen=True, slots=True)
 class CompositionPolicy:
-    """Transparent single-metric objective; other costs are still reported."""
+    """Transparent single-metric objective with a bounded planning search."""
 
     primary_cost: CostDimension = CostDimension.CALLS
     max_capabilities: int = 8
+    max_search_states: int = 10000
 
     def __post_init__(self) -> None:
         if self.max_capabilities < 1:
             raise ValueError("max_capabilities must be positive")
+        if self.max_search_states < 1:
+            raise ValueError("max_search_states must be positive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -411,9 +416,6 @@ def compose_habit(
             reasons.append("harness_incompatible")
         if situation.environment_ref not in item.compatible_environments:
             reasons.append("environment_incompatible")
-        if not item.requires_inputs.issubset(situation.available_inputs):
-            for name in sorted(item.requires_inputs - situation.available_inputs):
-                reasons.append(f"situation_input_missing:{name}")
         for key, expected in item.context_requirements:
             observed = situation_facts.get(key)
             if observed is None:
@@ -432,80 +434,193 @@ def compose_habit(
         else:
             eligible.append(item)
 
-    # Exact dynamic-programming set cover. Cost is optimized only on the one
-    # explicitly declared primary dimension; count and IDs are deterministic
-    # tie-breakers. Other cost dimensions are reported, never silently weighted.
-    outcome_names = tuple(sorted(required))
-    outcome_index = {name: index for index, name in enumerate(outcome_names)}
-    full_mask = (1 << len(outcome_names)) - 1
-    states: dict[int, tuple[CapabilityEntry, ...]] = {0: ()}
+    # Bounded Dijkstra search over facts produced by selected capabilities.
+    # A capability may consume initial situation inputs or outputs from earlier
+    # capabilities. The goal tracks required outcomes separately so merely having
+    # a similarly named input does not count as independently verified work.
     primary = habit.composition_policy.primary_cost
     maximum = habit.composition_policy.max_capabilities
+    max_states = habit.composition_policy.max_search_states
 
-    def score(items: tuple[CapabilityEntry, ...]) -> tuple[float, int, tuple[str, ...]]:
-        primary_total = math.fsum(item.cost.value_for(primary) for item in items)
-        return primary_total, len(items), tuple(item.capability_id for item in items)
-
+    fact_names = set(situation.available_inputs) | set(required)
     for item in eligible:
-        mask = 0
-        for outcome in item.provides & required:
-            mask |= 1 << outcome_index[outcome]
-        updated = dict(states)
-        for current_mask, chosen in states.items():
-            if len(chosen) >= maximum:
-                continue
-            candidate = chosen + (item,)
-            next_mask = current_mask | mask
-            incumbent = updated.get(next_mask)
-            if incumbent is None or score(candidate) < score(incumbent):
-                updated[next_mask] = candidate
-        states = updated
+        fact_names.update(item.requires_inputs)
+        fact_names.update(item.provides)
+    ordered_facts = tuple(sorted(fact_names))
+    fact_index = {name: index for index, name in enumerate(ordered_facts)}
 
-    chosen = states.get(full_mask)
-    if chosen is None:
-        covered_mask = 0
+    def as_mask(names: Iterable[str]) -> int:
+        mask = 0
+        for name in names:
+            mask |= 1 << fact_index[name]
+        return mask
+
+    initial_facts = as_mask(situation.available_inputs)
+    required_outcome_mask = as_mask(required)
+    masks = {
+        item.capability_id: (
+            as_mask(item.requires_inputs),
+            as_mask(item.provides),
+            as_mask(item.provides & required),
+        )
+        for item in eligible
+    }
+
+    # State key = (known facts, achieved outcomes). State value stores the best
+    # lexicographic objective and its executable capability order.
+    StateKey = tuple[int, int]
+    StateScore = tuple[float, int, tuple[str, ...], tuple[str, ...]]
+    initial_key: StateKey = (initial_facts, 0)
+    initial_score: StateScore = (0.0, 0, (), ())
+    best: dict[StateKey, tuple[StateScore, tuple[CapabilityEntry, ...]]] = {
+        initial_key: (initial_score, ())
+    }
+    serial = itertools.count()
+    queue: list[tuple[
+        float, int, tuple[str, ...], tuple[str, ...], int, int, int,
+        tuple[CapabilityEntry, ...]
+    ]] = [
+        (0.0, 0, (), (), next(serial), initial_facts, 0, ())
+    ]
+    chosen: tuple[CapabilityEntry, ...] | None = None
+    search_limited = False
+
+    while queue:
+        cost_so_far, count_so_far, sorted_ids, execution_ids, _, facts_mask, outcomes_mask, selected_so_far = heapq.heappop(queue)
+        state_key = (facts_mask, outcomes_mask)
+        current = best.get(state_key)
+        current_score: StateScore = (
+            cost_so_far, count_so_far, sorted_ids, execution_ids
+        )
+        if current is None or current[0] != current_score:
+            continue
+
+        if outcomes_mask & required_outcome_mask == required_outcome_mask:
+            chosen = selected_so_far
+            break
+        if count_so_far >= maximum:
+            continue
+
+        selected_ids = set(execution_ids)
         for item in eligible:
-            for outcome in item.provides & required:
-                covered_mask |= 1 << outcome_index[outcome]
-        covered = frozenset(
-            name for name, index in outcome_index.items() if covered_mask & (1 << index)
+            if item.capability_id in selected_ids:
+                continue
+            required_mask, provided_mask, provided_outcomes = masks[item.capability_id]
+            if required_mask & facts_mask != required_mask:
+                continue
+
+            next_facts = facts_mask | provided_mask
+            next_outcomes = outcomes_mask | provided_outcomes
+            if next_facts == facts_mask and next_outcomes == outcomes_mask:
+                continue
+
+            next_selected = selected_so_far + (item,)
+            next_execution_ids = execution_ids + (item.capability_id,)
+            next_sorted_ids = tuple(sorted(next_execution_ids))
+            next_score: StateScore = (
+                math.fsum((
+                    cost_so_far,
+                    item.cost.value_for(primary),
+                )),
+                count_so_far + 1,
+                next_sorted_ids,
+                next_execution_ids,
+            )
+            next_key: StateKey = (next_facts, next_outcomes)
+            incumbent = best.get(next_key)
+            if incumbent is not None and incumbent[0] <= next_score:
+                continue
+
+            best[next_key] = (next_score, next_selected)
+            if len(best) > max_states:
+                search_limited = True
+                break
+            heapq.heappush(
+                queue,
+                (
+                    next_score[0], next_score[1], next_score[2], next_score[3],
+                    next(serial), next_facts, next_outcomes, next_selected,
+                ),
+            )
+        if search_limited:
+            break
+
+    reachable_facts = 0
+    reachable_outcomes = 0
+    for facts_mask, outcomes_mask in best:
+        reachable_facts |= facts_mask
+        reachable_outcomes |= outcomes_mask
+
+    def diagnostics_for(item: CapabilityEntry, selected_ids: set[str]) -> CapabilityRejection | None:
+        if item.capability_id in selected_ids:
+            return None
+        reasons: list[str] = []
+        required_mask, _, _ = masks[item.capability_id]
+        missing_fact_mask = required_mask & ~reachable_facts
+        if missing_fact_mask:
+            for index, name in enumerate(ordered_facts):
+                if missing_fact_mask & (1 << index):
+                    has_provider = any(
+                        other.capability_id != item.capability_id
+                        and name in other.provides
+                        for other in eligible
+                    )
+                    reasons.append(
+                        f"capability_input_unreachable:{name}"
+                        if has_provider
+                        else f"situation_input_missing:{name}"
+                    )
+        if not reasons:
+            reasons.append("not_selected_by_primary_cost_objective")
+        return _rejection(item, reasons)
+
+    if chosen is None:
+        missing = frozenset(
+            name for name in required
+            if not (reachable_outcomes & (1 << fact_index[name]))
         )
-        missing = required - covered
-        reason = (
-            "capability_limit_prevents_coverage"
-            if not missing
-            else "no_eligible_capability_set_covers_outcome_contract"
-        )
+        selected_ids: set[str] = set()
+        diagnostics = [
+            item for item in (
+                diagnostics_for(entry, selected_ids) for entry in eligible
+            ) if item is not None
+        ]
+        if search_limited:
+            reason = "planning_state_limit_exceeded"
+            missing = required
+        elif not missing:
+            reason = "capability_limit_prevents_coverage"
+        else:
+            reason = "no_eligible_composition_satisfies_outcome_contract"
         return CompositionPlan(
             habit_id=habit.habit_id,
             habit_version=habit.version,
             situation_id=situation.situation_id,
             status=PlanStatus.NEEDS_CAPABILITY,
             selected=(),
-            covered_outcomes=covered,
+            covered_outcomes=required - missing,
             missing_outcomes=missing,
             missing_inputs=frozenset(),
-            rejected=tuple(rejected),
+            rejected=tuple(rejected + diagnostics),
             estimated_cost=empty_cost,
             primary_cost=primary,
             reason=reason,
         )
 
-    selected = tuple(sorted(chosen, key=lambda entry: entry.capability_id))
+    selected = chosen
     selected_ids = {item.capability_id for item in selected}
     for item in eligible:
-        if item.capability_id not in selected_ids:
-            rejected.append(
-                _rejection(item, ["not_selected_by_primary_cost_objective"])
-            )
-    covered = frozenset().union(*(item.provides for item in selected))
+        diagnostic = diagnostics_for(item, selected_ids)
+        if diagnostic is not None:
+            rejected.append(diagnostic)
+    covered = frozenset().union(*(item.provides & required for item in selected))
     return CompositionPlan(
         habit_id=habit.habit_id,
         habit_version=habit.version,
         situation_id=situation.situation_id,
         status=PlanStatus.READY,
         selected=selected,
-        covered_outcomes=covered & required,
+        covered_outcomes=covered,
         missing_outcomes=frozenset(),
         missing_inputs=frozenset(),
         rejected=tuple(rejected),
