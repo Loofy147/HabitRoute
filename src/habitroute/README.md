@@ -12,7 +12,17 @@ Canonical code is organized around **Machine Habits**, **Execution Harnesses** a
 
 Compensatable operations currently fail closed: a compensation adapter is not implemented. Unknown side-effect outcomes return `NEEDS_ATTENTION`.
 
-The last full verification run passed 77/77 core tests on Python 3.11–3.13.
+The 77/77 result is historical (commit `090fc7c3fddbc95c7b128045fa7a20ab3dd63400`). Current verification is recorded in `docs/CORE_STATUS.md` and the linked GitHub Actions run.
+
+## Repertoire and composition planning
+
+`CapabilityEntry` describes a versioned repertoire item (skill, tool, script, API, model, framework, service, dataset, context asset or sub-habit), its produced facts/outcomes, input requirements, situation predicates, permission requirements, compatible host versions, side-effect class, lifecycle/evidence reference and estimated cost.
+
+`SituationFrame` records time-bound observations and context facts. `HostCapabilitySnapshot` supplies exact available capability references (`capability_id@version`), effective permissions and allowed effects. The host remains authoritative; these structures do not grant permissions.
+
+`compose_habit` filters the repertoire and performs bounded, deterministic capability-chain planning. Outputs from one selected capability may satisfy the inputs of a later capability. It minimizes one explicitly declared cost dimension and reports other cost dimensions separately. The result is always a dry-run `CompositionPlan`; it never invokes tools or external providers.
+
+A READY plan means a complete eligible composition exists, not that the task has executed or succeeded. Evidence digests must be independently validated before activation; the planner only checks that an ACTIVE entry has an evidence reference. See `docs/REPERTOIRE_COMPOSITION_V0.3.md`.
 
 ## Harnesses
 
