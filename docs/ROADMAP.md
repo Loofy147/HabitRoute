@@ -50,8 +50,10 @@ Use repository change verification as the first specimen.
 - [ ] Define immutable HabitRelease manifest and content/dependency digests.
 - [ ] Define capability type, identity, contract, version, provenance, trust, licensing, compatibility, cost and side-effect metadata.
 - [ ] Define embedded, referenced, locally installed and remotely provided capability semantics.
-- [ ] Define SituationFrame and freshness/invalidation rules.
-- [ ] Define strategy/composition and policy contracts.
+- [x] Define the first typed SituationFrame with harness/environment identity, observation time, context digest, available inputs and applicability facts.
+- [x] Define the first composition policy: exact-version capability eligibility, context predicates, host permission/effect filtering and a bounded primary-cost objective.
+- [x] Implement dry-run dependency-chain composition where selected outputs satisfy later capability inputs.
+- [ ] Complete provenance, source/license/trust, dependency and invalidation fields for every capability type.
 - [ ] Define append-only HabitEpisode events, operation intent/result records and checkpoints.
 - [ ] Define declarative, procedural, semantic and episodic memory records.
 - [ ] Define independent EvidenceBundle and EvaluationReport.
@@ -64,7 +66,8 @@ Use repository change verification as the first specimen.
 - [ ] Keep existing operation-pattern and flow code as a compatibility layer until mapped or migrated.
 - [ ] Map PR #8's per-operation checkpoint design to HabitEpisode events; preserve its crash/reconciliation tests where still applicable.
 - [ ] Implement durable HabitRelease registry and capability manifest resolution.
-- [ ] Implement a dry-run situation-to-composition path with explainable capability selection.
+- [x] Implement a dry-run situation-to-composition path with explainable capability selection.
+- [ ] Bind the planner to the hand-designed repository-verification habit using actual capability manifests.
 - [ ] Implement one read-only capability adapter and prove host-denial paths.
 - [ ] Implement HabitEpisode persistence and crash/restart recovery.
 - [ ] Add dependency/harness/environment drift refusal and safe fallback.
@@ -121,12 +124,16 @@ Use repository change verification as the first specimen.
 - [ ] Operational monitoring for capability drift, stale memory, failure rates and cost regressions.
 - [ ] Publish only the supported scope; do not label the entire system production-ready without deployment-specific evidence.
 
+## Implementation checkpoint — 2026-11-09
+
+The first executable v0.3 slice is now in `src/habitroute/repertoire.py` and is tested by `tests/test_repertoire.py`. It provides typed capability entries, situation facts, exact host capability-version snapshots, host/habit effect filtering, dependency-aware bounded composition, explicit cost objectives and a dry-run result. It does not execute any capability or persist an episode. See [Repertoire and Composition Planner v0.3](REPERTOIRE_COMPOSITION_V0.3.md) and [Core Status](CORE_STATUS.md).
+
 ## Immediate next sequence
 
-1. Review the proposed v0.3 model and accept or revise its ownership boundaries.
-2. Specify the repository-verification habit as a full package with repertoire, situation model, composition, episode and evaluation contract.
-3. Design the schemas from that specimen.
-4. Map current operation/harness/flow code and PR #8 into the new model.
-5. Only then implement the first end-to-end habit path.
+1. Use the planner to define the actual capability repertoire for Repo Change Verification v1, with real adapter/version/evidence references rather than illustrative fixtures.
+2. Implement a concrete read-only Git/repository adapter and test host permission denial outside the planner.
+3. Add durable HabitRelease storage and bind the full selected capability chain to a HabitEpisode.
+4. Reconcile PR #8's operation-intent/result checkpoint protocol with the HabitEpisode model.
+5. Independently verify outcomes and cost observations before learning, promotion or automatic reuse.
 
-Do not expand into a general autonomous runtime before one complete habit demonstrates reliable, durable behaviour.
+Do not enable side-effecting execution or general autonomous self-evolution before the reference habit demonstrates reliable, durable and independently verified behaviour.
