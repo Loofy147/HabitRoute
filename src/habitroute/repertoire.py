@@ -386,8 +386,8 @@ def compose_habit(
             reasons.append("harness_incompatible")
         if situation.environment_ref not in item.compatible_environments:
             reasons.append("environment_incompatible")
-        if not item.required_inputs.issubset(situation.available_inputs):
-            for name in sorted(item.required_inputs - situation.available_inputs):
+        if not item.requires_inputs.issubset(situation.available_inputs):
+            for name in sorted(item.requires_inputs - situation.available_inputs):
                 reasons.append(f"situation_input_missing:{name}")
         for permission in sorted(item.required_permissions - host.granted_permissions):
             reasons.append(f"host_permission_missing:{permission}")
@@ -461,6 +461,12 @@ def compose_habit(
         )
 
     selected = tuple(sorted(chosen, key=lambda entry: entry.capability_id))
+    selected_ids = {item.capability_id for item in selected}
+    for item in eligible:
+        if item.capability_id not in selected_ids:
+            rejected.append(
+                _rejection(item, ["not_selected_by_primary_cost_objective"])
+            )
     covered = frozenset().union(*(item.provides for item in selected))
     return CompositionPlan(
         habit_id=habit.habit_id,
