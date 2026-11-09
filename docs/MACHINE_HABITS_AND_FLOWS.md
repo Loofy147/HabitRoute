@@ -234,6 +234,6 @@ Each event carries the flow node, operation index/reference, stable idempotency 
 
 If a process restarts with an intent but no result, the worker preserves the pending operation and moves the flow to `NEEDS_ATTENTION`. It does not automatically call the adapter again. An explicit provider-specific reconciliation path remains future work; the local event journal cannot determine whether an external provider applied an effect when its acknowledgement was lost.
 
-**Verification evidence:** draft PR https://github.com/Loofy147/HabitRoute/pull/12, commit `24afe47e769fa1ee3994adaa2077e74b5247cd7c`, Actions run https://github.com/Loofy147/HabitRoute/actions/runs/42703073137; 92/92 tests passed on Python 3.11, 3.12 and 3.13.
+**Verification evidence:** draft PR https://github.com/Loofy147/HabitRoute/pull/12, commit `aa15c8136b29a99ca666dc77f783322bda7f69b2`, Actions run https://github.com/Loofy147/HabitRoute/actions/runs/42703296651; 92/92 tests passed on Python 3.11, 3.12 and 3.13.
 
 **Limits remain:** local JSONL single-writer persistence, no distributed leases, no provider-backed reconciliation, no exactly-once external-effect guarantee, and no production adapter. The patch remains under review and is not yet part of `main`.
