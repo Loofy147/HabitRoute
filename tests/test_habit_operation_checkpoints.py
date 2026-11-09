@@ -354,7 +354,31 @@ class HabitOperationCheckpointTests(unittest.TestCase):
 
     def test_operation_cursor_resets_between_consecutive_habit_nodes(self):
         profile = harness_profile()
-        harness = StubHarness(profile)
+        harness = StubHarness(
+            profile,
+            {
+                "repo.scan": [
+                    HarnessOperationResult(
+                        OperationOutcome.SUCCEEDED,
+                        (("scan.result", "clean"),),
+                    ),
+                    HarnessOperationResult(
+                        OperationOutcome.SUCCEEDED,
+                        (("scan.result", "clean"),),
+                    ),
+                ],
+                "repo.test": [
+                    HarnessOperationResult(
+                        OperationOutcome.SUCCEEDED,
+                        (("index.ready", "true"),),
+                    ),
+                    HarnessOperationResult(
+                        OperationOutcome.SUCCEEDED,
+                        (("index.ready", "true"),),
+                    ),
+                ],
+            },
+        )
         habit = two_operation_habit(profile)
         definition = FlowDefinition(
             "two-habit-flow",
