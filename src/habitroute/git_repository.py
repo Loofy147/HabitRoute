@@ -63,6 +63,14 @@ class ChangedPath:
     target_blob: BlobObservation | None
 
     @property
+    def base_blob_id(self) -> str | None:
+        return self.base_blob.object_id if self.base_blob is not None else None
+
+    @property
+    def target_blob_id(self) -> str | None:
+        return self.target_blob.object_id if self.target_blob is not None else None
+
+    @property
     def base_content(self) -> bytes | None:
         return self.base_blob.content if self.base_blob is not None else None
 
