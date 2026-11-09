@@ -11,6 +11,11 @@ from .repertoire import (
     CompositionPlan, CompositionPolicy, CostDimension, CostEstimate, HabitDefinition,
     HostCapabilitySnapshot, OutcomeContract, PlanStatus, SituationFrame, compose_habit,
 )
+from .git_repository import (
+    BlobObservation, BlobReadStatus, ChangedPath, GitAdapterError, GitCommandError,
+    GitInputError, GitReadOnlyRepositoryAdapter, GitResourceLimitError,
+    RepositoryChangeSnapshot,
+)
 from .flows import (
     FlowDefinition, FlowEvent, FlowEventKind, FlowNode, FlowNodeKind, FlowSnapshot,
     FlowStatus, JsonlFlowJournal, PersistentFlow, apply_flow_event,
@@ -29,6 +34,9 @@ __all__ = [
     "CompositionPlan", "CompositionPolicy", "CostDimension", "CostEstimate",
     "HabitDefinition", "HostCapabilitySnapshot", "OutcomeContract", "PlanStatus",
     "SituationFrame", "compose_habit",
+    "BlobObservation", "BlobReadStatus", "ChangedPath", "GitAdapterError",
+    "GitCommandError", "GitInputError", "GitReadOnlyRepositoryAdapter",
+    "GitResourceLimitError", "RepositoryChangeSnapshot",
     "FlowDefinition", "FlowEvent", "FlowEventKind", "FlowNode", "FlowNodeKind",
     "FlowSnapshot", "FlowStatus", "JsonlFlowJournal", "PersistentFlow", "apply_flow_event",
     "DispatchStatus", "FlowDispatchResult", "FlowWorker", "HabitRegistry",
