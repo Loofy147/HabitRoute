@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from dataclasses import replace
 
 from habitroute.flows import (
     FlowDefinition,
@@ -131,6 +132,22 @@ class CrashAfterOperationEffectJournal(JsonlFlowJournal):
         super().append(event)
 
 
+
+
+
+class CrashBeforeSecondOperationIntentJournal(JsonlFlowJournal):
+    """Stops the process before dispatching the second operation."""
+
+    def append(self, event):
+        payload = dict(event.payload)
+        if (
+            event.kind is FlowEventKind.HABIT_OPERATION_STARTED
+            and payload.get("$meta.operation_index") == "1"
+        ):
+            raise OSError("simulated crash before second operation intent")
+        super().append(event)
+
+
 class HabitOperationCheckpointTests(unittest.TestCase):
     def test_each_operation_is_checkmarked_before_next_operation_runs(self):
         profile = harness_profile()
@@ -224,6 +241,114 @@ class HabitOperationCheckpointTests(unittest.TestCase):
             self.assertEqual(
                 restored.snapshot.pending_habit_operation.operation_ref,
                 "repo.scan",
+            )
+
+
+    def test_known_failure_retries_with_same_idempotency_key_and_durable_attempt_count(self):
+        profile = harness_profile()
+        harness = StubHarness(
+            profile,
+            {
+                "repo.scan": [
+                    HarnessOperationResult(OperationOutcome.FAILED, error_code="temporary"),
+                    HarnessOperationResult(
+                        OperationOutcome.SUCCEEDED,
+                        (("scan.result", "clean"),),
+                    ),
+                ],
+                "repo.test": [
+                    HarnessOperationResult(
+                        OperationOutcome.SUCCEEDED,
+                        (("index.ready", "true"),),
+                    )
+                ],
+            },
+        )
+        base = two_operation_habit(profile)
+        habit = replace(
+            base,
+            operations=(
+                OperationStep("repo.scan", OperationEffect.IDEMPOTENT, max_attempts=2),
+                base.operations[1],
+            ),
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = JsonlFlowJournal(tmp)
+            flow = initial_flow(journal, "checkpoint-003")
+            result = FlowWorker(harness, HabitRegistry((habit,))).dispatch(flow)
+
+            self.assertEqual(result.status, DispatchStatus.TERMINAL)
+            scan_calls = [call for call in harness.calls if call[0] == "repo.scan"]
+            self.assertEqual(len(scan_calls), 2)
+            self.assertEqual(scan_calls[0][2], scan_calls[1][2])
+
+            events = journal.load("checkpoint-003")
+            operation_events = [
+                event for event in events
+                if event.kind in (
+                    FlowEventKind.HABIT_OPERATION_STARTED,
+                    FlowEventKind.HABIT_OPERATION_FAILED,
+                    FlowEventKind.HABIT_OPERATION_SUCCEEDED,
+                )
+            ]
+            self.assertEqual(
+                [event.kind for event in operation_events[:4]],
+                [
+                    FlowEventKind.HABIT_OPERATION_STARTED,
+                    FlowEventKind.HABIT_OPERATION_FAILED,
+                    FlowEventKind.HABIT_OPERATION_STARTED,
+                    FlowEventKind.HABIT_OPERATION_SUCCEEDED,
+                ],
+            )
+            self.assertEqual(
+                dict(operation_events[0].payload)["$meta.attempt"], "1"
+            )
+            self.assertEqual(
+                dict(operation_events[2].payload)["$meta.attempt"], "2"
+            )
+
+    def test_restore_after_committed_operation_resumes_at_next_index(self):
+        profile = harness_profile()
+        harness = StubHarness(
+            profile,
+            {
+                "repo.scan": [
+                    HarnessOperationResult(
+                        OperationOutcome.SUCCEEDED,
+                        (("scan.result", "clean"),),
+                    )
+                ],
+                "repo.test": [
+                    HarnessOperationResult(
+                        OperationOutcome.SUCCEEDED,
+                        (("index.ready", "true"),),
+                    )
+                ],
+            },
+        )
+        habit = two_operation_habit(profile)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            faulted_journal = CrashBeforeSecondOperationIntentJournal(tmp)
+            flow = initial_flow(faulted_journal, "checkpoint-004")
+            with self.assertRaisesRegex(OSError, "before second operation intent"):
+                FlowWorker(harness, HabitRegistry((habit,))).dispatch(flow)
+
+            restored = PersistentFlow.restore(
+                flow_definition(),
+                "checkpoint-004",
+                JsonlFlowJournal(tmp),
+            )
+            self.assertEqual(restored.snapshot.habit_operation_index, 1)
+            self.assertIsNone(restored.snapshot.pending_habit_operation)
+            self.assertEqual(dict(restored.snapshot.context)["scan.result"], "clean")
+
+            result = FlowWorker(harness, HabitRegistry((habit,))).dispatch(restored)
+            self.assertEqual(result.status, DispatchStatus.TERMINAL)
+            self.assertEqual(
+                [call[0] for call in harness.calls],
+                ["repo.scan", "repo.test"],
             )
 
 
