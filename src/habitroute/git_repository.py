@@ -219,9 +219,12 @@ class GitReadOnlyRepositoryAdapter:
     def _resolve_commit(self, value: str, label: str) -> str:
         if not isinstance(value, str) or not _COMMIT_OID.fullmatch(value):
             raise GitInputError(f"{label} must be a full 40- or 64-character commit object ID")
-        resolved = os.fsdecode(
-            self._run_git(["rev-parse", "--verify", f"{value.lower()}^{{commit}}"])
-        ).strip().lower()
+        try:
+            resolved = os.fsdecode(
+                self._run_git(["rev-parse", "--verify", f"{value.lower()}^{{commit}}"])
+            ).strip().lower()
+        except GitCommandError as exc:
+            raise GitInputError(f"{label} is not an available commit object") from exc
         if resolved != value.lower():
             raise GitInputError(f"{label} did not resolve to the supplied commit object")
         return resolved
@@ -383,6 +386,7 @@ class GitReadOnlyRepositoryAdapter:
         raw_diff = self._run_git([
             "diff",
             "--raw",
+            "--no-abbrev",
             "--no-renames",
             "--no-ext-diff",
             "--no-textconv",
