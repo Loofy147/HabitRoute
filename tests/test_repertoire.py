@@ -35,6 +35,7 @@ def capability(
     harnesses: set[str] | None = None,
     environments: set[str] | None = None,
     effect: OperationEffect = OperationEffect.READ_ONLY,
+    context_requirements: tuple[tuple[str, str], ...] = (),
 ) -> CapabilityEntry:
     return CapabilityEntry(
         capability_id=capability_id,
@@ -48,6 +49,7 @@ def capability(
         effect=effect,
         status=status,
         evidence_digest=evidence_digest,
+        context_requirements=context_requirements,
         cost=cost or CostEstimate(calls=1),
     )
 
@@ -60,6 +62,7 @@ def situation(
     harness_version: str = "1",
     environment_id: str = "repo",
     environment_version: str = "1",
+    facts: dict[str, str] | None = None,
 ) -> SituationFrame:
     return SituationFrame(
         situation_id="situation-001",
@@ -70,6 +73,7 @@ def situation(
         environment_version=environment_version,
         available_inputs=frozenset(available_inputs or {"repository", "diff"}),
         context_digest="sha256:context",
+        facts=tuple(sorted((facts or {}).items())),
     )
 
 
@@ -299,6 +303,43 @@ class RepertoireCompositionTests(unittest.TestCase):
 
         self.assertEqual(result.status, PlanStatus.READY)
         self.assertEqual([item.capability_id for item in result.selected], ["a-tool", "test-tool"])
+
+    def test_situation_conditions_select_context_appropriate_capability(self) -> None:
+        docs_checker = capability(
+            "docs-checker", {"validation"},
+            context_requirements=(("change_kind", "documentation"),),
+        )
+        source_checker = capability(
+            "source-checker", {"validation"},
+            context_requirements=(("change_kind", "source"),),
+        )
+        result = compose_habit(
+            habit((docs_checker, source_checker), outcomes={"validation"}),
+            situation(facts={"change_kind": "documentation"}),
+            host(available={"docs-checker", "source-checker"}),
+            now=NOW,
+        )
+
+        self.assertEqual(result.status, PlanStatus.READY)
+        self.assertEqual(result.selected_ids, ("docs-checker",))
+        rejected = {item.capability_id: item.reasons for item in result.rejected}
+        self.assertIn("situation_condition_mismatch:change_kind", rejected["source-checker"])
+
+    def test_missing_situation_condition_blocks_specialized_capability(self) -> None:
+        specialized = capability(
+            "dependency-checker", {"validation"},
+            context_requirements=(("dependency_changed", "true"),),
+        )
+        result = compose_habit(
+            habit((specialized,), outcomes={"validation"}),
+            situation(),
+            host(available={"dependency-checker"}),
+            now=NOW,
+        )
+
+        self.assertEqual(result.status, PlanStatus.NEEDS_CAPABILITY)
+        rejected = {item.capability_id: item.reasons for item in result.rejected}
+        self.assertIn("situation_condition_missing:dependency_changed", rejected["dependency-checker"])
 
     def test_rejects_duplicate_capability_ids(self) -> None:
         item = capability("duplicate", {"scope"})
