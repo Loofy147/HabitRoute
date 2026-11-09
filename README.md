@@ -8,7 +8,7 @@ A habit uses the relevant small parts of its repertoire to produce an accurate r
 
 ## Proposed canonical model
 
-The proposed v0.3 architecture is documented in [Machine Habit Model v0.3](docs/MACHINE_HABIT_MODEL_V0.3.md). The model is a documentation-first proposal pending review and implementation.
+The v0.3 architecture is documented in [Machine Habit Model v0.3](docs/MACHINE_HABIT_MODEL_V0.3.md). The first executable slice is now implemented: a governed capability repertoire, typed situation frame, exact host capability snapshot and bounded dry-run composition planner. The complete habit lifecycle is still a staged implementation, not a finished runtime.
 
 - **Purpose and outcome contract:** what the habit is responsible for achieving and what must never be violated.
 - **Situation awareness:** what is happening, where, when, with what context, uncertainty and risk.
@@ -28,14 +28,16 @@ The current code is a useful foundation, not the complete v0.3 system:
 - `src/habitroute/machine.py` — operation-pattern model, harness profile, effect semantics, authorization and adapter-driven executor.
 - `src/habitroute/flows.py` — versioned flow definitions, event reducer, persistent run controller and local append-only JSONL journal.
 - `src/habitroute/worker.py` — worker for operation and exact-version habit nodes.
+- `src/habitroute/repertoire.py` — versioned capability entries, situation facts, host permission/availability snapshot and deterministic minimum-cost capability-chain planning (dry-run only).
 - `src/habitroute/contracts.py` and `execution.py` — earlier RL-style route/option prototype retained for comparison.
 - `experiments/step_savings_v1/` — synthetic experiment on route memory, retention, capacity, pruning and adaptation.
 
-The existing model does not yet implement the complete repertoire, situation intelligence, minimal-sufficient composition, habit-owned episode lifecycle, portable capability bindings or whole-habit evolution. See [Core Status](docs/CORE_STATUS.md).
+The new planner implements only the first part of the repertoire and composition contract. It does not invoke selected capabilities, persist Habit Episodes, authenticate host snapshots, validate evidence digests, consolidate memory or evolve active releases. See [Repertoire and Composition Planner v0.3](docs/REPERTOIRE_COMPOSITION_V0.3.md) and [Core Status](docs/CORE_STATUS.md).
 
 ## Research and design
 
 - [Machine Habit Model v0.3](docs/MACHINE_HABIT_MODEL_V0.3.md) — proposed behavioural system model.
+- [Repertoire and Composition Planner v0.3](docs/REPERTOIRE_COMPOSITION_V0.3.md) — implemented capability and dry-run composition contracts.
 - [Research Reassessment v0.3](docs/RESEARCH_REASSESSMENT_V0.3.md) — human habit analogy, prior art, evidence boundaries and comparative benchmark.
 - [Reference Habit mapping](docs/REFERENCE_HABIT_REPOSITORY_VERIFICATION_V0.3.md) — maps the existing hand-designed repository verifier to the v0.3 model.
 - [Architecture](docs/ARCHITECTURE.md) — runtime and component topology.

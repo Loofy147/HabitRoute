@@ -141,7 +141,22 @@ For external effects, journal durability is not an exactly-once guarantee. Opera
 - **Claude Code, Codex or other agent hosts:** execution environments or supervisors that provide tools and enforce their own security boundaries. HabitRoute should integrate through adapters rather than recreate each product.
 - **External verifiers:** may evaluate outputs, invariants or policy compliance; their identity and evidence must be recorded.
 
-## 9. Mapping to current repository code
+## 9. Implemented repertoire-composition slice (2026-11-09)
+
+`src/habitroute/repertoire.py` now implements the first executable portion of the v0.3 model:
+
+- `CapabilityEntry` represents versioned skills/tools/scripts/APIs/models/frameworks/services/data/context and other repertoire items.
+- `SituationFrame` carries time-bound environment identity, available inputs, context digest and applicability facts.
+- `HostCapabilitySnapshot` pins exact capability versions and effective permissions/effects supplied by the host.
+- `OutcomeContract` declares required outputs, initial inputs, freshness and effects the habit may consider.
+- `compose_habit` filters candidates and plans a bounded dependency chain using intermediate outputs, a transparent primary cost dimension and deterministic tie-breaking.
+- The result is always a dry-run plan. No capability is invoked.
+
+The current selection model assumes monotonic facts: selected capabilities add facts/outcomes and later capabilities consume them. It does not yet support arbitrary mutable state, loops, parallel branches, side-effect execution or concurrent resource contention. Search is bounded and fails closed.
+
+`CapabilityEntry.evidence_digest` and `HostCapabilitySnapshot.snapshot_digest` are references supplied to the planner. The planner does not authenticate or retrieve them. A READY plan is not evidence of task success.
+
+## 10. Mapping to current repository code
 
 | Current component | Role under the proposed model | Status |
 |---|---|---|
@@ -154,7 +169,7 @@ For external effects, journal durability is not an exactly-once guarantee. Opera
 
 The current core is not an implementation of the complete v0.3 model. The open PR #8 operation-checkpoint work is still a draft and should be evaluated as an episode-durability component, not treated as the entire durability solution.
 
-## 10. Core invariants
+## 11. Core invariants
 
 1. The habit owns its operating behaviour and governed repertoire.
 2. Every selected capability is traceable to a situation, purpose, policy and pinned contract.
