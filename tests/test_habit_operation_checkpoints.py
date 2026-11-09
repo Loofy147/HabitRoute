@@ -352,5 +352,58 @@ class HabitOperationCheckpointTests(unittest.TestCase):
             )
 
 
+    def test_operation_cursor_resets_between_consecutive_habit_nodes(self):
+        profile = harness_profile()
+        harness = StubHarness(profile)
+        habit = two_operation_habit(profile)
+        definition = FlowDefinition(
+            "two-habit-flow",
+            1,
+            "first",
+            (
+                FlowNode(
+                    "first", FlowNodeKind.HABIT, "refresh-index", "second",
+                    target_version=2,
+                ),
+                FlowNode(
+                    "second", FlowNodeKind.HABIT, "refresh-index", "done",
+                    target_version=2,
+                ),
+                FlowNode("done", FlowNodeKind.END),
+            ),
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = JsonlFlowJournal(tmp)
+            flow = PersistentFlow.start(
+                definition,
+                "checkpoint-005",
+                journal,
+                {"task.kind": "refresh", "repo.present": "true"},
+            )
+            worker = FlowWorker(harness, HabitRegistry((habit,)))
+
+            first = worker.dispatch(flow)
+            self.assertEqual(first.status, DispatchStatus.ADVANCED)
+            self.assertEqual(flow.current_node.node_id, "second")
+            self.assertEqual(flow.snapshot.habit_operation_index, 0)
+            self.assertEqual(dict(flow.snapshot.habit_operation_attempts), {})
+            self.assertIsNone(flow.snapshot.pending_habit_operation)
+
+            second = worker.dispatch(flow)
+            self.assertEqual(second.status, DispatchStatus.TERMINAL)
+            self.assertEqual(flow.snapshot.status, FlowStatus.SUCCEEDED)
+            self.assertEqual(
+                [call[0] for call in harness.calls],
+                ["repo.scan", "repo.test", "repo.scan", "repo.test"],
+            )
+            started = [
+                dict(event.payload)["$meta.operation_index"]
+                for event in journal.load("checkpoint-005")
+                if event.kind is FlowEventKind.HABIT_OPERATION_STARTED
+            ]
+            self.assertEqual(started, ["0", "1", "0", "1"])
+
+
 if __name__ == "__main__":
     unittest.main()
