@@ -88,7 +88,7 @@ def host(
         harness_version="1",
         environment_id="repo",
         environment_version="1",
-        available_capabilities=frozenset(available),
+        available_capabilities=frozenset(f"{name}@1.0.0" for name in available),
         granted_permissions=frozenset(permissions or set()),
         allowed_effects=frozenset(allowed_effects or {OperationEffect.READ_ONLY}),
         snapshot_digest="sha256:host-snapshot",
@@ -104,6 +104,7 @@ def habit(
     objective: CostDimension = CostDimension.CALLS,
     max_capabilities: int = 8,
     max_search_states: int = 10000,
+    permitted_effects: set[OperationEffect] | None = None,
 ) -> HabitDefinition:
     return HabitDefinition(
         habit_id="repo-change-verification",
@@ -114,6 +115,9 @@ def habit(
             required_outcomes=frozenset(outcomes or {"scope", "tests"}),
             required_inputs=frozenset(inputs or {"repository", "diff"}),
             max_situation_age_seconds=max_age,
+            permitted_effects=frozenset(
+                permitted_effects or {OperationEffect.READ_ONLY}
+            ),
         ),
         composition_policy=CompositionPolicy(
             primary_cost=objective,
@@ -203,6 +207,7 @@ class RepertoireCompositionTests(unittest.TestCase):
         self.assertEqual(result.status, PlanStatus.NEEDS_CAPABILITY)
         rejected = {item.capability_id: item.reasons for item in result.rejected}
         self.assertIn("situation_input_missing:complete_diff", rejected["diff-parser"])
+        self.assertEqual(result.missing_inputs, frozenset({"complete_diff"}))
 
     def test_rejects_unavailable_and_incompatible_capabilities(self) -> None:
         unavailable = capability("not-installed", {"scope"})
@@ -346,6 +351,7 @@ class RepertoireCompositionTests(unittest.TestCase):
         self.assertEqual(result.status, PlanStatus.NEEDS_CAPABILITY)
         rejected = {item.capability_id: item.reasons for item in result.rejected}
         self.assertIn("situation_condition_missing:dependency_changed", rejected["dependency-checker"])
+        self.assertEqual(result.missing_inputs, frozenset({"dependency_changed"}))
 
     def test_composes_capability_chain_using_outputs_as_later_inputs(self) -> None:
         snapshot_reader = capability(
@@ -446,6 +452,53 @@ class RepertoireCompositionTests(unittest.TestCase):
         self.assertEqual(result.status, PlanStatus.NEEDS_CAPABILITY)
         self.assertEqual(result.selected, ())
         self.assertIn("first_result", result.missing_outcomes)
+
+    def test_host_snapshot_must_pin_exact_capability_version(self) -> None:
+        item = capability("repo-reader", {"scope"})
+        stale_host = HostCapabilitySnapshot(
+            harness_id="local",
+            harness_version="1",
+            environment_id="repo",
+            environment_version="1",
+            available_capabilities=frozenset({"repo-reader@0.9.0"}),
+            granted_permissions=frozenset(),
+            allowed_effects=frozenset({OperationEffect.READ_ONLY}),
+            snapshot_digest="sha256:stale-capability-version",
+        )
+        result = compose_habit(
+            habit((item,), outcomes={"scope"}),
+            situation(),
+            stale_host,
+            now=NOW,
+        )
+
+        self.assertEqual(result.status, PlanStatus.NEEDS_CAPABILITY)
+        rejected = {entry.capability_id: entry.reasons for entry in result.rejected}
+        self.assertIn("capability_unavailable_in_host", rejected["repo-reader"])
+
+    def test_habit_contract_can_forbid_effect_allowed_by_host(self) -> None:
+        mutating = capability(
+            "mutating-check",
+            {"tests"},
+            effect=OperationEffect.IDEMPOTENT,
+        )
+        result = compose_habit(
+            habit(
+                (mutating,),
+                outcomes={"tests"},
+                permitted_effects={OperationEffect.READ_ONLY},
+            ),
+            situation(),
+            host(
+                available={"mutating-check"},
+                allowed_effects={OperationEffect.READ_ONLY, OperationEffect.IDEMPOTENT},
+            ),
+            now=NOW,
+        )
+
+        self.assertEqual(result.status, PlanStatus.NEEDS_CAPABILITY)
+        rejected = {entry.capability_id: entry.reasons for entry in result.rejected}
+        self.assertIn("effect_not_permitted_by_habit:idempotent", rejected["mutating-check"])
 
     def test_rejects_duplicate_capability_ids(self) -> None:
         item = capability("duplicate", {"scope"})
