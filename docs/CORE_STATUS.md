@@ -81,3 +81,31 @@ For a multi-operation habit, the worker calls the sequence executor and commits 
 4. Propagate a typed cost vector from operation through habit and flow.
 5. Add a concrete read-only harness adapter and prove actual policy enforcement.
 6. Add durable exact-version habit storage and staged discovery/promotion only after evidence controls are in place.
+
+
+## Update — per-operation checkpoint patch (2026-11-09)
+
+**Review branch:** `feat/per-operation-checkpoints-v0.1`  
+**Draft PR:** https://github.com/Loofy147/HabitRoute/pull/12  
+**Issue:** https://github.com/Loofy147/HabitRoute/issues/11  
+**Verified commit:** `24afe47e769fa1ee3994adaa2077e74b5247cd7c`  
+**GitHub Actions:** https://github.com/Loofy147/HabitRoute/actions/runs/42703073137
+
+The draft patch adds four operation-level flow events (intent, succeeded, failed, unknown), a persisted operation cursor and attempt counts, and worker callbacks that append the result before invoking the next operation. The worker resumes from the next committed operation after restart. If an intent exists without a result, the worker preserves the pending operation and moves the flow to `NEEDS_ATTENTION`; it does not invoke that operation again.
+
+Verification on the PR head:
+- Python 3.11: 92/92 tests passed.
+- Python 3.12: 92/92 tests passed.
+- Python 3.13: 92/92 tests passed.
+- The new regression cases cover per-operation intent/result ordering, crash after operation effect before result acknowledgement, safe retry with a stable idempotency key, and resume after an operation checkpoint.
+
+**Scope and remaining limits:** this is still a draft branch, not merged into `main`. The journal is local JSONL with a single-writer-per-run contract. A pending/unknown external outcome is preserved and escalated; provider-specific query/reconciliation, distributed workers, production adapters, exactly-once external effects and broad autonomy are not implemented or claimed. A human/operator must resolve ambiguous external outcomes before continuation.
+
+## Updated immediate engineering priorities
+
+1. Review and merge PR #12 only after reviewing the operation event contract and recovery behavior.
+2. Add provider-specific reconciliation adapters and tests for each real external effect class; keep unknown outcomes fail-closed until that exists.
+3. Replace caller-supplied aggregates as the sole efficiency evidence with raw paired trial records and independent verification.
+4. Propagate a typed cost vector from operation through habit and flow.
+5. Add a concrete read-only provider adapter and prove policy enforcement at the provider boundary.
+6. Add durable exact-version habit storage and staged discovery/promotion only after evidence controls are in place.
