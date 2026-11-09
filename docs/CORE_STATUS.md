@@ -88,15 +88,15 @@ For a multi-operation habit, the worker calls the sequence executor and commits 
 **Review branch:** `feat/per-operation-checkpoints-v0.1`  
 **Draft PR:** https://github.com/Loofy147/HabitRoute/pull/12  
 **Issue:** https://github.com/Loofy147/HabitRoute/issues/11  
-**Verified commit:** `aa15c8136b29a99ca666dc77f783322bda7f69b2`  
-**GitHub Actions:** https://github.com/Loofy147/HabitRoute/actions/runs/42703296651
+**Verified commit:** `5e6e4a85a0bcc34dc36e90a966f1411a74112b5d`  
+**GitHub Actions:** https://github.com/Loofy147/HabitRoute/actions/runs/42703779821
 
 The draft patch adds four operation-level flow events (intent, succeeded, failed, unknown), a persisted operation cursor and attempt counts, and worker callbacks that append the result before invoking the next operation. The worker resumes from the next committed operation after restart. If an intent exists without a result, the worker preserves the pending operation and moves the flow to `NEEDS_ATTENTION`; it does not invoke that operation again.
 
 Verification on the PR head:
-- Python 3.11: 92/92 tests passed.
-- Python 3.12: 92/92 tests passed.
-- Python 3.13: 92/92 tests passed.
+- Python 3.11: 93/93 tests passed.
+- Python 3.12: 93/93 tests passed.
+- Python 3.13: 93/93 tests passed.
 - The new regression cases cover per-operation intent/result ordering, crash after operation effect before result acknowledgement, safe retry with a stable idempotency key, and resume after an operation checkpoint.
 
 **Scope and remaining limits:** this is still a draft branch, not merged into `main`. The journal is local JSONL with a single-writer-per-run contract. A pending/unknown external outcome is preserved and escalated; provider-specific query/reconciliation, distributed workers, production adapters, exactly-once external effects and broad autonomy are not implemented or claimed. A human/operator must resolve ambiguous external outcomes before continuation.
