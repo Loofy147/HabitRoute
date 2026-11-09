@@ -404,6 +404,9 @@ def compose_habit(
     eligible: list[CapabilityEntry] = []
     rejected: list[CapabilityRejection] = []
     required = contract.required_outcomes
+    useful_facts = required | frozenset().union(
+        *(item.requires_inputs for item in habit.capabilities)
+    )
 
     situation_facts = dict(situation.facts)
     for item in sorted(habit.capabilities, key=lambda entry: entry.capability_id):
@@ -426,8 +429,8 @@ def compose_habit(
             reasons.append(f"host_permission_missing:{permission}")
         if item.effect not in host.allowed_effects:
             reasons.append(f"effect_not_authorized:{item.effect.value}")
-        if not (item.provides & required):
-            reasons.append("no_required_outcome_coverage")
+        if not (item.provides & useful_facts):
+            reasons.append("no_required_outcome_or_dependency_coverage")
 
         if reasons:
             rejected.append(_rejection(item, reasons))
