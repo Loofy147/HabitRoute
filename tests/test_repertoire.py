@@ -341,6 +341,34 @@ class RepertoireCompositionTests(unittest.TestCase):
         rejected = {item.capability_id: item.reasons for item in result.rejected}
         self.assertIn("situation_condition_missing:dependency_changed", rejected["dependency-checker"])
 
+    def test_composes_capability_chain_using_outputs_as_later_inputs(self) -> None:
+        snapshot_reader = capability(
+            "snapshot-reader", {"repository_snapshot"}, inputs={"repository"},
+        )
+        diff_parser = capability(
+            "diff-parser", {"change_inventory"}, inputs={"repository_snapshot"},
+        )
+        test_index = capability(
+            "test-index", {"tests"}, inputs={"change_inventory"},
+        )
+        result = compose_habit(
+            habit(
+                (snapshot_reader, diff_parser, test_index),
+                outcomes={"tests"},
+                inputs={"repository"},
+            ),
+            situation(available_inputs={"repository"}),
+            host(available={"snapshot-reader", "diff-parser", "test-index"}),
+            now=NOW,
+        )
+
+        self.assertEqual(result.status, PlanStatus.READY)
+        self.assertEqual(
+            result.selected_ids,
+            ("snapshot-reader", "diff-parser", "test-index"),
+        )
+        self.assertEqual(result.covered_outcomes, frozenset({"tests"}))
+
     def test_rejects_duplicate_capability_ids(self) -> None:
         item = capability("duplicate", {"scope"})
         with self.assertRaisesRegex(ValueError, "unique"):
