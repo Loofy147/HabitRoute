@@ -121,6 +121,7 @@ class CapabilityEntry:
     effect: OperationEffect
     status: CapabilityStatus
     evidence_digest: str | None
+    context_requirements: tuple[tuple[str, str], ...] = ()
     cost: CostEstimate = CostEstimate()
 
     def __post_init__(self) -> None:
@@ -144,9 +145,20 @@ class CapabilityEntry:
             raise ValueError("ACTIVE capability requires evidence_digest")
         if self.evidence_digest is not None and not self.evidence_digest.strip():
             raise ValueError("evidence_digest must be non-empty when provided")
+        conditions = tuple(sorted(self.context_requirements))
+        if any(
+            len(pair) != 2
+            or not isinstance(pair[0], str) or not pair[0].strip()
+            or not isinstance(pair[1], str) or not pair[1].strip()
+            for pair in conditions
+        ):
+            raise ValueError("context_requirements must contain non-empty key/value pairs")
+        if len({key for key, _ in conditions}) != len(conditions):
+            raise ValueError("context requirement keys must be unique")
+        object.__setattr__(self, "context_requirements", conditions)
 
     @property
-    def harness_ref(self) -> str:
+    def version_ref(self) -> str:
         return f"{self.capability_id}@{self.version}"
 
 
@@ -162,6 +174,7 @@ class SituationFrame:
     environment_version: str
     available_inputs: frozenset[str]
     context_digest: str
+    facts: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         for name in (
@@ -174,6 +187,17 @@ class SituationFrame:
         object.__setattr__(
             self, "available_inputs", _freeze_names(self.available_inputs, "available_inputs")
         )
+        facts = tuple(sorted(self.facts))
+        if any(
+            len(pair) != 2
+            or not isinstance(pair[0], str) or not pair[0].strip()
+            or not isinstance(pair[1], str) or not pair[1].strip()
+            for pair in facts
+        ):
+            raise ValueError("facts must contain non-empty key/value pairs")
+        if len({key for key, _ in facts}) != len(facts):
+            raise ValueError("situation fact keys must be unique")
+        object.__setattr__(self, "facts", facts)
 
     @property
     def harness_ref(self) -> str:
@@ -376,6 +400,7 @@ def compose_habit(
     rejected: list[CapabilityRejection] = []
     required = contract.required_outcomes
 
+    situation_facts = dict(situation.facts)
     for item in sorted(habit.capabilities, key=lambda entry: entry.capability_id):
         reasons: list[str] = []
         if item.status is not CapabilityStatus.ACTIVE:
@@ -389,6 +414,12 @@ def compose_habit(
         if not item.requires_inputs.issubset(situation.available_inputs):
             for name in sorted(item.requires_inputs - situation.available_inputs):
                 reasons.append(f"situation_input_missing:{name}")
+        for key, expected in item.context_requirements:
+            observed = situation_facts.get(key)
+            if observed is None:
+                reasons.append(f"situation_condition_missing:{key}")
+            elif observed != expected:
+                reasons.append(f"situation_condition_mismatch:{key}")
         for permission in sorted(item.required_permissions - host.granted_permissions):
             reasons.append(f"host_permission_missing:{permission}")
         if item.effect not in host.allowed_effects:
