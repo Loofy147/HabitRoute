@@ -12,7 +12,7 @@ Canonical code is organized around **Machine Habits**, **Execution Harnesses** a
 
 Compensatable operations currently fail closed: a compensation adapter is not implemented. Unknown side-effect outcomes return `NEEDS_ATTENTION`.
 
-The historical 77/77 result applies to an earlier core baseline. Draft PR #12 currently passes 92/92 tests on Python 3.11–3.13; see the PR and its linked GitHub Actions run for the exact reviewed commit.
+The historical 77/77 result applies to an earlier core baseline. Draft PR #12 currently passes 93/93 tests on Python 3.11–3.13; see the PR and its linked GitHub Actions run for the exact reviewed commit: https://github.com/Loofy147/HabitRoute/actions/runs/42703779821.
 
 ## Harnesses
 
