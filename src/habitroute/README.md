@@ -12,7 +12,7 @@ Canonical code is organized around **Machine Habits**, **Execution Harnesses** a
 
 Compensatable operations currently fail closed: a compensation adapter is not implemented. Unknown side-effect outcomes return `NEEDS_ATTENTION`.
 
-The last full verification run passed 77/77 core tests on Python 3.11–3.13.
+The historical 77/77 result applies to an earlier core baseline. Draft PR #12 currently passes 92/92 tests on Python 3.11–3.13; see the PR and its linked GitHub Actions run for the exact reviewed commit.
 
 ## Harnesses
 
@@ -40,7 +40,7 @@ run = PersistentFlow.restore(definition, "run-0001", journal)
 
 ## Important limits
 
-The flow engine does not automatically dispatch operations to the harness or commit results from `execute_machine_habit`. A worker must connect those components. Persisting flow state does not make external effects exactly-once. Classify operations and supply idempotency, deduplication, compensation or manual reconciliation for uncertain outcomes.
+`PersistentFlow` remains the event journal and state reducer; `FlowWorker` dispatches its current node through the configured harness. In draft PR #12, habit-node execution commits an intent and a typed result/checkpoint for each operation before dispatching the next operation. A restored run resumes from the next committed operation. If an operation intent exists without a result, the worker fails closed into `NEEDS_ATTENTION` rather than replaying the possibly completed effect. Provider-specific reconciliation is still required to resolve such cases. Persisting flow state does not make external effects exactly-once. Classify operations and supply idempotency, deduplication, compensation or manual reconciliation for uncertain outcomes.
 
 JSONL is a local single-writer journal, not a distributed database. Use an appropriate transactional store/lease adapter before multi-worker production use.
 
