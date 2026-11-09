@@ -102,6 +102,8 @@ def habit(
     inputs: set[str] | None = None,
     max_age: int = 300,
     objective: CostDimension = CostDimension.CALLS,
+    max_capabilities: int = 8,
+    max_search_states: int = 10000,
 ) -> HabitDefinition:
     return HabitDefinition(
         habit_id="repo-change-verification",
@@ -113,7 +115,11 @@ def habit(
             required_inputs=frozenset(inputs or {"repository", "diff"}),
             max_situation_age_seconds=max_age,
         ),
-        composition_policy=CompositionPolicy(primary_cost=objective, max_capabilities=8),
+        composition_policy=CompositionPolicy(
+            primary_cost=objective,
+            max_capabilities=max_capabilities,
+            max_search_states=max_search_states,
+        ),
     )
 
 
@@ -368,6 +374,78 @@ class RepertoireCompositionTests(unittest.TestCase):
             ("snapshot-reader", "diff-parser", "test-index"),
         )
         self.assertEqual(result.covered_outcomes, frozenset({"tests"}))
+
+    def test_primary_cost_dimension_is_explicit_not_blended(self) -> None:
+        entries = (
+            capability(
+                "combined",
+                {"scope", "tests"},
+                cost=CostEstimate(calls=1, tokens=100),
+            ),
+            capability("scope-only", {"scope"}, cost=CostEstimate(calls=1, tokens=1)),
+            capability("tests-only", {"tests"}, cost=CostEstimate(calls=1, tokens=1)),
+        )
+
+        call_plan = compose_habit(
+            habit(entries, objective=CostDimension.CALLS),
+            situation(),
+            host(available={item.capability_id for item in entries}),
+            now=NOW,
+        )
+        token_plan = compose_habit(
+            habit(entries, objective=CostDimension.TOKENS),
+            situation(),
+            host(available={item.capability_id for item in entries}),
+            now=NOW,
+        )
+
+        self.assertEqual(call_plan.selected_ids, ("combined",))
+        self.assertEqual(token_plan.selected_ids, ("scope-only", "tests-only"))
+        self.assertEqual(call_plan.estimated_cost.tokens, 100)
+        self.assertEqual(token_plan.estimated_cost.calls, 2)
+
+    def test_capability_limit_prevents_partial_ready_plan(self) -> None:
+        entries = (
+            capability("scope-only", {"scope"}),
+            capability("tests-only", {"tests"}),
+        )
+        result = compose_habit(
+            habit(entries, max_capabilities=1),
+            situation(),
+            host(available={"scope-only", "tests-only"}),
+            now=NOW,
+        )
+
+        self.assertEqual(result.status, PlanStatus.NEEDS_CAPABILITY)
+        self.assertEqual(result.reason, "capability_limit_prevents_coverage")
+        self.assertEqual(result.selected, ())
+
+    def test_search_state_limit_fails_closed(self) -> None:
+        entries = (capability("combined", {"scope", "tests"}),)
+        result = compose_habit(
+            habit(entries, max_search_states=1),
+            situation(),
+            host(available={"combined"}),
+            now=NOW,
+        )
+
+        self.assertEqual(result.status, PlanStatus.NEEDS_CAPABILITY)
+        self.assertEqual(result.reason, "planning_state_limit_exceeded")
+        self.assertEqual(result.selected, ())
+
+    def test_dependency_cycle_does_not_produce_ready_plan(self) -> None:
+        first = capability("first", {"first_result"}, inputs={"second_result"})
+        second = capability("second", {"second_result"}, inputs={"first_result"})
+        result = compose_habit(
+            habit((first, second), outcomes={"first_result"}, inputs={"repository"}),
+            situation(available_inputs={"repository"}),
+            host(available={"first", "second"}),
+            now=NOW,
+        )
+
+        self.assertEqual(result.status, PlanStatus.NEEDS_CAPABILITY)
+        self.assertEqual(result.selected, ())
+        self.assertIn("first_result", result.missing_outcomes)
 
     def test_rejects_duplicate_capability_ids(self) -> None:
         item = capability("duplicate", {"scope"})
