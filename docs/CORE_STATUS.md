@@ -88,8 +88,8 @@ For a multi-operation habit, the worker calls the sequence executor and commits 
 **Review branch:** `feat/per-operation-checkpoints-v0.1`  
 **Draft PR:** https://github.com/Loofy147/HabitRoute/pull/12  
 **Issue:** https://github.com/Loofy147/HabitRoute/issues/11  
-**Verified commit:** `24afe47e769fa1ee3994adaa2077e74b5247cd7c`  
-**GitHub Actions:** https://github.com/Loofy147/HabitRoute/actions/runs/42703073137
+**Verified commit:** `aa15c8136b29a99ca666dc77f783322bda7f69b2`  
+**GitHub Actions:** https://github.com/Loofy147/HabitRoute/actions/runs/42703296651
 
 The draft patch adds four operation-level flow events (intent, succeeded, failed, unknown), a persisted operation cursor and attempt counts, and worker callbacks that append the result before invoking the next operation. The worker resumes from the next committed operation after restart. If an intent exists without a result, the worker preserves the pending operation and moves the flow to `NEEDS_ATTENTION`; it does not invoke that operation again.
 
