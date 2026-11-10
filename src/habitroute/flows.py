@@ -5,6 +5,7 @@ contract. It does not make external side effects exactly-once.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from enum import Enum
 import json
@@ -252,8 +253,56 @@ class FlowJournal(Protocol):
     def load(self, run_id: str) -> tuple[FlowEvent, ...]: ...
 
 
+@contextmanager
+def _process_file_lock(lock_path: Path):
+    """Lock one local journal stream across processes on the same host.
+
+    Lock files are stable coordination objects and must never be unlinked while
+    writers may be active. Network filesystems and multi-host locking are not
+    supported. Unsupported operating systems fail closed.
+    """
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as handle:
+        if os.name == "nt":
+            import errno
+            import msvcrt
+            import time
+
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+                os.fsync(handle.fileno())
+            while True:
+                handle.seek(0)
+                try:
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError as exc:
+                    if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                        raise
+                    time.sleep(0.05)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        elif os.name == "posix":
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        else:
+            raise RuntimeError(
+                f"flow journal process locking is unsupported on {os.name!r}"
+            )
+
+
 class JsonlFlowJournal:
-    """Local append-only journal. Use one writer per run_id."""
+    """Local append-only journal with per-run, cross-process serialization."""
 
     def __init__(self, root: str | os.PathLike[str]) -> None:
         self.root = Path(root)
@@ -265,7 +314,11 @@ class JsonlFlowJournal:
             raise ValueError("unsafe run_id")
         return self.root / f"{run_id}.jsonl"
 
-    def load(self, run_id: str) -> tuple[FlowEvent, ...]:
+    def _run_lock(self, run_id: str):
+        self._path(run_id)
+        return _process_file_lock(self.root / f".{run_id}.lock")
+
+    def _load_unlocked(self, run_id: str) -> tuple[FlowEvent, ...]:
         path = self._path(run_id)
         if not path.exists():
             return ()
@@ -286,10 +339,14 @@ class JsonlFlowJournal:
                 events.append(event)
         return tuple(events)
 
+    def load(self, run_id: str) -> tuple[FlowEvent, ...]:
+        with self._run_lock(run_id):
+            return self._load_unlocked(run_id)
+
     def append(self, event: FlowEvent) -> None:
-        with self._lock:
+        with self._lock, self._run_lock(event.run_id):
             path = self._path(event.run_id)
-            existing = self.load(event.run_id)
+            existing = self._load_unlocked(event.run_id)
             for prior in existing:
                 if prior.event_id == event.event_id:
                     if prior == event:
