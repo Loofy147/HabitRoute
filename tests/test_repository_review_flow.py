@@ -68,11 +68,15 @@ class RepositoryReviewFlowTests(unittest.TestCase):
         git(self.repository, "config", "user.name", "Repository Review Test")
         git(self.repository, "config", "user.email", "review@example.invalid")
         (self.repository / "module.py").write_text("value = 1\n", encoding="utf-8")
-        git(self.repository, "add", "--", "module.py")
+        (self.repository / "old.txt").write_text("remove this path\n", encoding="utf-8")
+        git(self.repository, "add", "--", "module.py", "old.txt")
         git(self.repository, "commit", "-q", "-m", "base")
         self.base = git(self.repository, "rev-parse", "HEAD")
         (self.repository / "module.py").write_text("value = 2\n", encoding="utf-8")
         (self.repository / "README.md").write_text("bounded review fixture\n", encoding="utf-8")
+        (self.repository / "new file.txt").write_text("path with spaces\n", encoding="utf-8")
+        (self.repository / "image.bin").write_bytes(b"\x00\x01\x02\xff")
+        (self.repository / "old.txt").unlink()
         git(self.repository, "add", "-A")
         git(self.repository, "commit", "-q", "-m", "target")
         self.target = git(self.repository, "rev-parse", "HEAD")
@@ -179,10 +183,21 @@ class RepositoryReviewFlowTests(unittest.TestCase):
         self.assertIn("working_tree_unchanged", package["verification"]["checks"])
         self.assertEqual(
             {item["path"] for item in package["inventory"]["changes"]},
-            {"module.py", "README.md"},
+            {"module.py", "README.md", "old.txt", "new file.txt", "image.bin"},
         )
         self.assertEqual(package["repository"]["base_commit"], self.base)
         self.assertEqual(package["repository"]["target_commit"], self.target)
+        changes_by_path = {
+            item["path"]: item for item in package["inventory"]["changes"]
+        }
+        self.assertEqual(changes_by_path["module.py"]["change_type"], "M")
+        self.assertEqual(changes_by_path["README.md"]["change_type"], "A")
+        self.assertEqual(changes_by_path["old.txt"]["change_type"], "D")
+        self.assertEqual(changes_by_path["new file.txt"]["change_type"], "A")
+        self.assertEqual(
+            changes_by_path["image.bin"]["target_blob"]["status"],
+            "binary",
+        )
         self.assertEqual(before_head, git(self.repository, "rev-parse", "HEAD"))
         self.assertEqual(
             before_status,
