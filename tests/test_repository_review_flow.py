@@ -270,5 +270,36 @@ class RepositoryReviewFlowTests(unittest.TestCase):
         self.assertEqual(len(list(self.evidence_root.glob("*.json"))), 1)
 
 
+    def test_evidence_store_rejects_modified_artifact_bytes(self):
+        store = RepositoryReviewEvidenceStore(self.evidence_root)
+        digest = store.write({"schema": "test", "value": "immutable"})
+        target = self.evidence_root / f"{digest}.json"
+        target.write_text('{"schema":"tampered"}', encoding="utf-8")
+        from habitroute.repository_review_flow import RepositoryReviewEvidenceError
+        with self.assertRaises(RepositoryReviewEvidenceError):
+            store.read(digest)
+
+    def test_wrong_situation_repository_root_fails_before_git_inspection(self):
+        wrong = SituationFrame(
+            situation_id="m3-wrong-root",
+            observed_at=self.now,
+            harness_id=self.situation.harness_id,
+            harness_version=self.situation.harness_version,
+            environment_id=self.situation.environment_id,
+            environment_version=self.situation.environment_version,
+            available_inputs=self.situation.available_inputs,
+            context_digest="sha256:wrong-root",
+            facts=(
+                ("repository_root", str(self.repository.parent)),
+                ("base_commit", self.base),
+                ("target_commit", self.target),
+            ),
+        )
+        command_count = self.adapter._command_count
+        with self.assertRaises(RepositoryReviewPlanError):
+            self.create_session(situation=wrong)
+        self.assertEqual(self.adapter._command_count, command_count)
+
+
 if __name__ == "__main__":
     unittest.main()
