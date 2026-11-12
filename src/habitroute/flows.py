@@ -323,7 +323,7 @@ class JsonlFlowJournal:
         if not path.exists():
             return ()
         raw = path.read_bytes()
-        if raw and not raw.endswith(b"\\n"):
+        if raw and not raw.endswith(b"\n"):
             raise ValueError("flow journal has an unterminated trailing record")
         try:
             text = raw.decode("utf-8")
