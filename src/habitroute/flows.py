@@ -322,21 +322,28 @@ class JsonlFlowJournal:
         path = self._path(run_id)
         if not path.exists():
             return ()
+        raw = path.read_bytes()
+        if raw and not raw.endswith(b"\\n"):
+            raise ValueError("flow journal has an unterminated trailing record")
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("flow journal is not valid UTF-8") from exc
+
         events: list[FlowEvent] = []
-        with path.open("r", encoding="utf-8") as handle:
-            for line_number, line in enumerate(handle, start=1):
-                if not line.strip():
-                    continue
-                try:
-                    event = FlowEvent.from_json(line)
-                except Exception as exc:
-                    raise ValueError(f"corrupt flow journal at line {line_number}") from exc
-                if event.run_id != run_id:
-                    raise ValueError(f"journal run_id mismatch at line {line_number}")
-                expected = len(events) + 1
-                if event.sequence != expected:
-                    raise ValueError(f"journal sequence gap at line {line_number}")
-                events.append(event)
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if not line.strip():
+                raise ValueError(f"empty flow journal record at line {line_number}")
+            try:
+                event = FlowEvent.from_json(line)
+            except Exception as exc:
+                raise ValueError(f"corrupt flow journal at line {line_number}") from exc
+            if event.run_id != run_id:
+                raise ValueError(f"journal run_id mismatch at line {line_number}")
+            expected = len(events) + 1
+            if event.sequence != expected:
+                raise ValueError(f"journal sequence gap at line {line_number}")
+            events.append(event)
         return tuple(events)
 
     def load(self, run_id: str) -> tuple[FlowEvent, ...]:
@@ -358,9 +365,12 @@ class JsonlFlowJournal:
             payload = (event.to_json() + "\n").encode("utf-8")
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
             try:
-                written = os.write(fd, payload)
-                if written != len(payload):
-                    raise OSError("short journal write")
+                remaining = memoryview(payload)
+                while remaining:
+                    written = os.write(fd, remaining)
+                    if written <= 0:
+                        raise OSError("journal append made no write progress")
+                    remaining = remaining[written:]
                 os.fsync(fd)
             finally:
                 os.close(fd)
