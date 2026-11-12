@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import multiprocessing
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from habitroute.flows import FlowEvent, FlowEventKind, JsonlFlowJournal
 
@@ -110,6 +112,79 @@ class FlowJournalConcurrencyTests(unittest.TestCase):
             self.assertEqual(len(events), 1)
             self.assertEqual(events[0].sequence, 1)
             self.assertEqual(sorted(status for status, _ in outcomes), ["error", "ok"])
+
+
+    def test_short_writes_are_completed_before_append_returns(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            journal = JsonlFlowJournal(temporary)
+            event = FlowEvent(
+                run_id="run-short-write",
+                sequence=1,
+                event_id="event-short-write",
+                kind=FlowEventKind.STARTED,
+                node_id="start",
+            )
+            original_write = os.write
+            write_sizes = []
+
+            def partial_write(fd, payload):
+                view = memoryview(payload)
+                amount = max(1, view.nbytes // 3)
+                write_sizes.append(amount)
+                return original_write(fd, view[:amount])
+
+            with patch("habitroute.flows.os.write", side_effect=partial_write):
+                journal.append(event)
+
+            self.assertGreater(len(write_sizes), 1)
+            self.assertEqual(journal.load("run-short-write"), (event,))
+
+    def test_unterminated_valid_json_tail_fails_closed_before_append(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            journal = JsonlFlowJournal(temporary)
+            path = Path(temporary) / "run-torn-tail.jsonl"
+            event = FlowEvent(
+                run_id="run-torn-tail",
+                sequence=1,
+                event_id="event-torn-tail",
+                kind=FlowEventKind.STARTED,
+                node_id="start",
+            )
+            path.write_text(event.to_json(), encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                journal.load("run-torn-tail")
+            with self.assertRaises(ValueError):
+                journal.append(event)
+
+    def test_interrupted_short_write_leaves_journal_fail_closed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            journal = JsonlFlowJournal(temporary)
+            event = FlowEvent(
+                run_id="run-interrupted-write",
+                sequence=1,
+                event_id="event-interrupted-write",
+                kind=FlowEventKind.STARTED,
+                node_id="start",
+            )
+            original_write = os.write
+            calls = 0
+
+            def fail_after_prefix(fd, payload):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    return original_write(fd, memoryview(payload)[:5])
+                raise OSError("injected append failure")
+
+            with patch("habitroute.flows.os.write", side_effect=fail_after_prefix):
+                with self.assertRaises(OSError):
+                    journal.append(event)
+
+            with self.assertRaises(ValueError):
+                journal.load("run-interrupted-write")
+            with self.assertRaises(ValueError):
+                journal.append(event)
 
     def test_process_termination_releases_per_run_lock(self):
         context = multiprocessing.get_context("spawn")
