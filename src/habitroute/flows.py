@@ -5,6 +5,7 @@ contract. It does not make external side effects exactly-once.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from enum import Enum
 import json
@@ -48,6 +49,10 @@ class FlowEventKind(str, Enum):
     STEP_SUCCEEDED = "step_succeeded"
     STEP_FAILED = "step_failed"
     STEP_OUTCOME_UNKNOWN = "step_outcome_unknown"
+    HABIT_OPERATION_STARTED = "habit_operation_started"
+    HABIT_OPERATION_SUCCEEDED = "habit_operation_succeeded"
+    HABIT_OPERATION_FAILED = "habit_operation_failed"
+    HABIT_OPERATION_UNKNOWN = "habit_operation_unknown"
     BRANCH_RESOLVED = "branch_resolved"
     WAIT_RELEASED = "wait_released"
     PAUSED = "paused"
@@ -194,6 +199,14 @@ class FlowEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class PendingHabitOperation:
+    operation_index: int
+    operation_ref: str
+    idempotency_key: str
+    attempt: int
+
+
+@dataclass(frozen=True, slots=True)
 class FlowSnapshot:
     run_id: str
     flow_id: str
@@ -206,6 +219,9 @@ class FlowSnapshot:
     last_event_sequence: int = 0
     applied_event_ids: tuple[str, ...] = ()
     resume_status: FlowStatus | None = None
+    habit_operation_index: int = 0
+    habit_operation_attempts: tuple[tuple[int, int], ...] = ()
+    pending_habit_operation: PendingHabitOperation | None = None
 
     @classmethod
     def initial(
@@ -237,8 +253,56 @@ class FlowJournal(Protocol):
     def load(self, run_id: str) -> tuple[FlowEvent, ...]: ...
 
 
+@contextmanager
+def _process_file_lock(lock_path: Path):
+    """Lock one local journal stream across processes on the same host.
+
+    Lock files are stable coordination objects and must never be unlinked while
+    writers may be active. Network filesystems and multi-host locking are not
+    supported. Unsupported operating systems fail closed.
+    """
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as handle:
+        if os.name == "nt":
+            import errno
+            import msvcrt
+            import time
+
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+                os.fsync(handle.fileno())
+            while True:
+                handle.seek(0)
+                try:
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError as exc:
+                    if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                        raise
+                    time.sleep(0.05)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        elif os.name == "posix":
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        else:
+            raise RuntimeError(
+                f"flow journal process locking is unsupported on {os.name!r}"
+            )
+
+
 class JsonlFlowJournal:
-    """Local append-only journal. Use one writer per run_id."""
+    """Local append-only journal with per-run, cross-process serialization."""
 
     def __init__(self, root: str | os.PathLike[str]) -> None:
         self.root = Path(root)
@@ -250,31 +314,46 @@ class JsonlFlowJournal:
             raise ValueError("unsafe run_id")
         return self.root / f"{run_id}.jsonl"
 
-    def load(self, run_id: str) -> tuple[FlowEvent, ...]:
+    def _run_lock(self, run_id: str):
+        self._path(run_id)
+        return _process_file_lock(self.root / f".{run_id}.lock")
+
+    def _load_unlocked(self, run_id: str) -> tuple[FlowEvent, ...]:
         path = self._path(run_id)
         if not path.exists():
             return ()
+        raw = path.read_bytes()
+        if raw and not raw.endswith(b"\n"):
+            raise ValueError("flow journal has an unterminated trailing record")
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("flow journal is not valid UTF-8") from exc
+
         events: list[FlowEvent] = []
-        with path.open("r", encoding="utf-8") as handle:
-            for line_number, line in enumerate(handle, start=1):
-                if not line.strip():
-                    continue
-                try:
-                    event = FlowEvent.from_json(line)
-                except Exception as exc:
-                    raise ValueError(f"corrupt flow journal at line {line_number}") from exc
-                if event.run_id != run_id:
-                    raise ValueError(f"journal run_id mismatch at line {line_number}")
-                expected = len(events) + 1
-                if event.sequence != expected:
-                    raise ValueError(f"journal sequence gap at line {line_number}")
-                events.append(event)
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if not line.strip():
+                raise ValueError(f"empty flow journal record at line {line_number}")
+            try:
+                event = FlowEvent.from_json(line)
+            except Exception as exc:
+                raise ValueError(f"corrupt flow journal at line {line_number}") from exc
+            if event.run_id != run_id:
+                raise ValueError(f"journal run_id mismatch at line {line_number}")
+            expected = len(events) + 1
+            if event.sequence != expected:
+                raise ValueError(f"journal sequence gap at line {line_number}")
+            events.append(event)
         return tuple(events)
 
+    def load(self, run_id: str) -> tuple[FlowEvent, ...]:
+        with self._run_lock(run_id):
+            return self._load_unlocked(run_id)
+
     def append(self, event: FlowEvent) -> None:
-        with self._lock:
+        with self._lock, self._run_lock(event.run_id):
             path = self._path(event.run_id)
-            existing = self.load(event.run_id)
+            existing = self._load_unlocked(event.run_id)
             for prior in existing:
                 if prior.event_id == event.event_id:
                     if prior == event:
@@ -286,9 +365,12 @@ class JsonlFlowJournal:
             payload = (event.to_json() + "\n").encode("utf-8")
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
             try:
-                written = os.write(fd, payload)
-                if written != len(payload):
-                    raise OSError("short journal write")
+                remaining = memoryview(payload)
+                while remaining:
+                    written = os.write(fd, remaining)
+                    if written <= 0:
+                        raise OSError("journal append made no write progress")
+                    remaining = remaining[written:]
                 os.fsync(fd)
             finally:
                 os.close(fd)
@@ -335,8 +417,12 @@ def apply_flow_event(
         context = snapshot.context_dict()
         context.update({key: value for key, value in payload.items() if not key.startswith("$meta.")})
         updated = replace(
-            snapshot, context=tuple(sorted(context.items())),
+            snapshot,
+            context=tuple(sorted(context.items())),
             completed_nodes=snapshot.completed_nodes + (node.node_id,),
+            habit_operation_index=0,
+            habit_operation_attempts=(),
+            pending_habit_operation=None,
         )
         updated = _settle_at_node(definition, updated, node.next_on_success)
     elif event.kind is FlowEventKind.STEP_FAILED:
@@ -350,11 +436,23 @@ def apply_flow_event(
         counts[node.node_id] = attempts
         updated = replace(snapshot, attempts=tuple(sorted(counts.items())))
         if attempts < node.max_attempts:
+            # Same flow node is being retried; preserve its operation cursor.
             updated = replace(updated, status=FlowStatus.RUNNING)
         elif node.next_on_failure is not None:
-            updated = _settle_at_node(definition, updated, node.next_on_failure)
+            updated = replace(
+                _settle_at_node(definition, updated, node.next_on_failure),
+                habit_operation_index=0,
+                habit_operation_attempts=(),
+                pending_habit_operation=None,
+            )
         else:
-            updated = replace(updated, status=FlowStatus.FAILED)
+            updated = replace(
+                updated,
+                status=FlowStatus.FAILED,
+                habit_operation_index=0,
+                habit_operation_attempts=(),
+                pending_habit_operation=None,
+            )
     elif event.kind is FlowEventKind.STEP_OUTCOME_UNKNOWN:
         if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
             raise ValueError("unknown outcome does not match current flow node")
@@ -362,6 +460,64 @@ def apply_flow_event(
         context.update({key: value for key, value in payload.items() if not key.startswith("$meta.")})
         updated = replace(snapshot, status=FlowStatus.NEEDS_ATTENTION,
                           context=tuple(sorted(context.items())))
+    elif event.kind is FlowEventKind.HABIT_OPERATION_STARTED:
+        if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
+            raise ValueError("habit operation intent does not match current flow node")
+        node = definition.node(snapshot.current_node)
+        if node.kind is not FlowNodeKind.HABIT or snapshot.pending_habit_operation is not None:
+            raise ValueError("habit operation intent requires a habit node with no pending operation")
+        operation_index = int(payload.get("$meta.operation_index", "-1"))
+        operation_ref = payload.get("$meta.operation_ref", "")
+        idempotency_key = payload.get("$meta.idempotency_key", "")
+        attempt = int(payload.get("$meta.attempt", "0"))
+        attempts = dict(snapshot.habit_operation_attempts)
+        if operation_index != snapshot.habit_operation_index:
+            raise ValueError("habit operation index does not match flow checkpoint")
+        if not operation_ref or not idempotency_key or attempt != attempts.get(operation_index, 0) + 1:
+            raise ValueError("invalid habit operation intent metadata")
+        attempts[operation_index] = attempt
+        pending = PendingHabitOperation(operation_index, operation_ref, idempotency_key, attempt)
+        updated = replace(
+            snapshot,
+            habit_operation_attempts=tuple(sorted(attempts.items())),
+            pending_habit_operation=pending,
+        )
+    elif event.kind in (FlowEventKind.HABIT_OPERATION_SUCCEEDED,
+                        FlowEventKind.HABIT_OPERATION_FAILED,
+                        FlowEventKind.HABIT_OPERATION_UNKNOWN):
+        if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
+            raise ValueError("habit operation result does not match current flow node")
+        node = definition.node(snapshot.current_node)
+        pending = snapshot.pending_habit_operation
+        operation_index = int(payload.get("$meta.operation_index", "-1"))
+        operation_ref = payload.get("$meta.operation_ref", "")
+        idempotency_key = payload.get("$meta.idempotency_key", "")
+        attempt = int(payload.get("$meta.attempt", "0"))
+        if node.kind is not FlowNodeKind.HABIT or pending is None:
+            raise ValueError("habit operation result has no matching pending intent")
+        if (operation_index, operation_ref, idempotency_key, attempt) != (
+            pending.operation_index, pending.operation_ref, pending.idempotency_key, pending.attempt
+        ):
+            raise ValueError("habit operation result does not match pending intent")
+        if event.kind is FlowEventKind.HABIT_OPERATION_SUCCEEDED:
+            context = snapshot.context_dict()
+            context.update({
+                key[len("output."):]: value
+                for key, value in payload.items()
+                if key.startswith("output.")
+            })
+            updated = replace(
+                snapshot,
+                context=tuple(sorted(context.items())),
+                habit_operation_index=snapshot.habit_operation_index + 1,
+                pending_habit_operation=None,
+            )
+        elif event.kind is FlowEventKind.HABIT_OPERATION_FAILED:
+            updated = replace(snapshot, pending_habit_operation=None)
+        else:
+            # Preserve the pending intent: the external effect may have happened,
+            # but its outcome is not proven. Recovery must reconcile, never replay.
+            updated = snapshot
     elif event.kind is FlowEventKind.BRANCH_RESOLVED:
         if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
             raise ValueError("branch event does not match current flow node")
@@ -486,6 +642,72 @@ class PersistentFlow:
         payload.update({f"$meta.{key}": value for key, value in (metadata or {}).items()})
         return self._commit(
             FlowEventKind.STEP_OUTCOME_UNKNOWN, self.snapshot.current_node, payload
+        )
+
+    def _habit_operation_payload(
+        self, operation_index: int, operation_ref: str,
+        idempotency_key: str, attempt: int,
+        extra: Mapping[str, str] | None = None,
+    ) -> dict[str, str]:
+        payload = {
+            "$meta.operation_index": str(operation_index),
+            "$meta.operation_ref": operation_ref,
+            "$meta.idempotency_key": idempotency_key,
+            "$meta.attempt": str(attempt),
+        }
+        payload.update(extra or {})
+        return payload
+
+    def start_habit_operation(
+        self, operation_index: int, operation_ref: str,
+        idempotency_key: str, attempt: int,
+    ) -> FlowSnapshot:
+        return self._commit(
+            FlowEventKind.HABIT_OPERATION_STARTED,
+            self.snapshot.current_node,
+            self._habit_operation_payload(
+                operation_index, operation_ref, idempotency_key, attempt
+            ),
+        )
+
+    def succeed_habit_operation(
+        self, operation_index: int, operation_ref: str,
+        idempotency_key: str, attempt: int,
+        outputs: Mapping[str, str] | None = None,
+    ) -> FlowSnapshot:
+        extra = {f"output.{key}": value for key, value in (outputs or {}).items()}
+        return self._commit(
+            FlowEventKind.HABIT_OPERATION_SUCCEEDED,
+            self.snapshot.current_node,
+            self._habit_operation_payload(
+                operation_index, operation_ref, idempotency_key, attempt, extra
+            ),
+        )
+
+    def fail_habit_operation(
+        self, operation_index: int, operation_ref: str,
+        idempotency_key: str, attempt: int, error_code: str | None = None,
+    ) -> FlowSnapshot:
+        extra = {"$meta.error_code": error_code or "operation_failed"}
+        return self._commit(
+            FlowEventKind.HABIT_OPERATION_FAILED,
+            self.snapshot.current_node,
+            self._habit_operation_payload(
+                operation_index, operation_ref, idempotency_key, attempt, extra
+            ),
+        )
+
+    def mark_habit_operation_unknown(
+        self, operation_index: int, operation_ref: str,
+        idempotency_key: str, attempt: int, error_code: str | None = None,
+    ) -> FlowSnapshot:
+        extra = {"$meta.error_code": error_code or "operation_outcome_unknown"}
+        return self._commit(
+            FlowEventKind.HABIT_OPERATION_UNKNOWN,
+            self.snapshot.current_node,
+            self._habit_operation_payload(
+                operation_index, operation_ref, idempotency_key, attempt, extra
+            ),
         )
 
     def resolve_branch(self) -> FlowSnapshot:

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from habitroute.git_repository import (
     BlobReadStatus,
@@ -128,6 +130,33 @@ class GitReadOnlyRepositoryAdapterTests(unittest.TestCase):
                 GitReadOnlyRepositoryAdapter(other)
         finally:
             other.rmdir()
+
+
+    def test_inherited_git_environment_cannot_redirect_repository_identity(self) -> None:
+        other = Path(tempfile.mkdtemp())
+        try:
+            git(other, "init", "-q")
+            git(other, "config", "user.name", "Other Repository")
+            git(other, "config", "user.email", "other@example.invalid")
+            (other / "other.txt").write_text("other\n", encoding="utf-8")
+            git(other, "add", "--", "other.txt")
+            git(other, "commit", "-q", "-m", "other")
+            with patch.dict(os.environ, {
+                "GIT_DIR": str(other / ".git"),
+                "GIT_WORK_TREE": str(other),
+                "GIT_INDEX_FILE": str(other / ".git" / "index"),
+            }):
+                adapter = GitReadOnlyRepositoryAdapter(self.root)
+                self.assertEqual(adapter.repository_root, self.root.resolve())
+                snapshot = adapter.inspect_commit_range(self.base, self.target)
+                self.assertEqual(snapshot.repository_root, str(self.root.resolve()))
+                self.assertEqual(
+                    {item.path for item in snapshot.changes},
+                    {"README.md", "old.txt", "new file.txt", "image.bin"},
+                )
+        finally:
+            import shutil
+            shutil.rmtree(other)
 
 
 if __name__ == "__main__":

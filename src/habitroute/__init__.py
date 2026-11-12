@@ -26,6 +26,11 @@ from .flows import (
     FlowStatus, JsonlFlowJournal, PersistentFlow, apply_flow_event,
 )
 from .worker import DispatchStatus, FlowDispatchResult, FlowWorker, HabitRegistry
+from .repository_review_flow import (
+    RepositoryReviewEvidenceError, RepositoryReviewEvidenceStore,
+    RepositoryReviewFlowSession, RepositoryReviewPlanError,
+    create_repository_review_flow,
+)
 
 
 __all__ = [
@@ -48,4 +53,7 @@ __all__ = [
     "FlowDefinition", "FlowEvent", "FlowEventKind", "FlowNode", "FlowNodeKind",
     "FlowSnapshot", "FlowStatus", "JsonlFlowJournal", "PersistentFlow", "apply_flow_event",
     "DispatchStatus", "FlowDispatchResult", "FlowWorker", "HabitRegistry",
+    "RepositoryReviewEvidenceError", "RepositoryReviewEvidenceStore",
+    "RepositoryReviewFlowSession", "RepositoryReviewPlanError",
+    "create_repository_review_flow",
 ]
