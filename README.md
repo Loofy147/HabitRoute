@@ -33,6 +33,7 @@ The worker exists, but it is not a distributed workflow service and its multi-op
 - [Roadmap](docs/ROADMAP.md)
 - [Decisions](docs/DECISIONS.md)
 - [Repository Study and Technical Assessment](docs/HABITROUTE_ASSESSMENT.md)
+- [UWS / HabitRoute Portfolio Alignment and Review Record](docs/PORTFOLIO_ALIGNMENT_UWS.md)
 
 ## Unified Agent Runtime direction
 
