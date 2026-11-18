@@ -1,6 +1,19 @@
 # Roadmap
 
-This roadmap separates the existing HabitRoute core from the broader Unified Agent Runtime integration. Checkboxes reflect the inspected 2026-11-06 snapshot; future completion requires evidence.
+This roadmap separates the existing HabitRoute core from the broader Unified Agent Runtime integration. Main-branch checkboxes reflect merged default-branch state; draft-only implementation is recorded separately. Last portfolio reconciliation: 2026-11-18.
+
+## Portfolio status reconciliation — 2026-11-18
+
+The original 2026-11-06 roadmap snapshot is retained as the baseline. Subsequent draft work must not silently change the default-branch checkboxes.
+
+- **IMPLEMENTED_ON_DRAFT:** PR #12 (`feat/per-operation-checkpoints-v0.1`, head `c505d96fe011f94af8eae90fab84f6ebcf317c81`) implements per-operation intent/result/unknown checkpoints, cursor recovery and fail-closed pending-intent behavior. Its recorded matrix run reports 93/93 on Python 3.11–3.13. It is not merged.
+- **IMPLEMENTED_ON_DRAFT:** PR #14 (`integration/m3-readonly-persistent-repo-review-v0.1`, head `b7055142e5d10d656161a667db150fc2fea487e7`) implements a local read-only Git review flow, content-addressed evidence, independent object/inventory verification, and additional journal fault/Windows qualification. It is not merged.
+- **OPEN:** Issue #13 remains open because UWS task/goal retrieval, live authorization and evidence registration are not connected. The local host capability snapshot is not cryptographically authenticated.
+- **OPEN:** Issue #15's authority-bound provider reconciliation remains required before ambiguous non-repeatable effects can be resumed.
+- **OPEN:** PR #10, #12 and #14 are draft/unmerged. Their exact dependency lineage must be reviewed before merge.
+- **NOT_STARTED:** CPM v0.5.0 import and the thin Unified Agent Runtime composition remain future work. See [CPM integration plan](CPM_INTEGRATION_PLAN.md) and [portfolio alignment review](PORTFOLIO_ALIGNMENT_UWS.md).
+
+**Interpretation:** keep default-branch checkboxes unchecked until the implementation is merged. A draft PR test pass is evidence for that branch/ref only; it is not main-branch completion, production deployment or multi-host readiness.
 
 ## P0 — Preserve and reproduce existing research
 
