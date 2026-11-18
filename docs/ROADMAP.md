@@ -8,12 +8,13 @@ The original 2026-11-06 roadmap snapshot is retained as the baseline. Subsequent
 
 - **IMPLEMENTED_ON_DRAFT:** PR #12 (`feat/per-operation-checkpoints-v0.1`, head `c505d96fe011f94af8eae90fab84f6ebcf317c81`) implements per-operation intent/result/unknown checkpoints, cursor recovery and fail-closed pending-intent behavior. Its recorded matrix run reports 93/93 on Python 3.11–3.13. It is not merged.
 - **IMPLEMENTED_ON_DRAFT:** PR #14 (`integration/m3-readonly-persistent-repo-review-v0.1`, head `b7055142e5d10d656161a667db150fc2fea487e7`) implements a local read-only Git review flow, content-addressed evidence, independent object/inventory verification, and additional journal fault/Windows qualification. It is not merged.
-- **OPEN:** Issue #13 remains open because UWS task/goal retrieval, live authorization and evidence registration are not connected. The local host capability snapshot is not cryptographically authenticated.
+- **EXPERIMENTALLY_SUPPORTED (UWS prerequisite, draft-only):** UWS repair PR #27 head `49066e7f8222b73a0d28e87a8c9206160c77cbfb` passed six migrations plus a no-op repeat on isolated MySQL 8.4.13, 16/16 persistence tests and 3/3 HGSB validation tests; no full application build, MySQL 8.0 qualification or production activation is claimed.
+- **OPEN:** Issue #13 and [UWS issue #28](https://github.com/Loofy147/unified-knowledge-work-system/issues/28) remain prerequisites. UWS has no project-pinned service principal or service-only goal-read/evidence-ingestion routes; do not reuse user-session JWTs. The local content-addressed artifact has no inspected UWS upload contract, and the local host capability snapshot is not cryptographically authenticated.
 - **OPEN:** Issue #15's authority-bound provider reconciliation remains required before ambiguous non-repeatable effects can be resumed.
 - **OPEN:** PR #10, #12 and #14 are draft/unmerged. Their exact dependency lineage must be reviewed before merge.
 - **NOT_STARTED:** CPM v0.5.0 import and the thin Unified Agent Runtime composition remain future work. See [CPM integration plan](CPM_INTEGRATION_PLAN.md) and [portfolio alignment review](PORTFOLIO_ALIGNMENT_UWS.md).
 
-**Interpretation:** keep default-branch checkboxes unchecked until the implementation is merged. A draft PR test pass is evidence for that branch/ref only; it is not main-branch completion, production deployment or multi-host readiness.
+**Interpretation:** keep default-branch checkboxes unchecked until the implementation is merged. A draft PR test pass is evidence for that branch/ref only; it is not main-branch completion, production deployment or multi-host readiness. UWS's focused MySQL qualification is dependency evidence, not evidence that the HabitRoute ↔ UWS integration exists.
 
 ## P0 — Preserve and reproduce existing research
 
