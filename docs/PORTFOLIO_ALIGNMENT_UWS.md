@@ -24,9 +24,9 @@ The combined runtime is an accepted architecture direction, not an implemented p
 | HabitRoute per-operation checkpoints | [PR #12](https://github.com/Loofy147/HabitRoute/pull/12), `feat/per-operation-checkpoints-v0.1`, head `c505d96fe011f94af8eae90fab84f6ebcf317c81` | Recorded GitHub Actions run 42703942809: 93/93 tests on Python 3.11, 3.12 and 3.13 | IMPLEMENTED_ON_DRAFT | Draft/unmerged; local JSONL/single-writer; unknown provider outcomes still need authority-bound reconciliation |
 | Capability repertoire and situation-aware planning | [PR #10](https://github.com/Loofy147/HabitRoute/pull/10), `feat/habit-repertoire-composition-v0.3`, head `dd9d88e45b2bfd2dfeaa0130439838181ccc8c15` | PR #14 inherits this lineage | IMPLEMENTED_ON_DRAFT | Draft/unmerged; planner output is not permission |
 | M3 read-only repository review | [PR #14](https://github.com/Loofy147/HabitRoute/pull/14), `integration/m3-readonly-persistent-repo-review-v0.1`, head `b7055142e5d10d656161a667db150fc2fea487e7` | Recorded Actions run 43221871510 passed Python 3.11–3.13 and Windows journal qualification | IMPLEMENTED_ON_DRAFT | Local-only read-only flow; no live UWS retrieval/auth/evidence registration; no semantic code correctness or project-test claim |
-| UWS HGSB persistence | [UWS PR #23](https://github.com/Loofy147/unified-knowledge-work-system/pull/23) | Migrations and persistence APIs exist on draft branch | IMPLEMENTED_ON_DRAFT | Database activation and real-MySQL qualification remain pending |
+| UWS HGSB persistence | [PR #23](https://github.com/Loofy147/unified-knowledge-work-system/pull/23) + repair [PR #27](https://github.com/Loofy147/unified-knowledge-work-system/pull/27), head `49066e7f8222b73a0d28e87a8c9206160c77cbfb` | Disposable MySQL 8.4.13: migrations 0001–0006 + no-op second pass; 16/16 persistence tests and 3/3 validator tests passed; routing generation 13/13 | DISPOSABLE_DB_QUALIFIED_ON_DRAFT | Draft/unmerged; full application typecheck/build and MySQL 8.0 compatibility remain; no production activation or Actions run |
 | Human–Machine Twin architecture | [UWS PR #24](https://github.com/Loofy147/unified-knowledge-work-system/pull/24) | Component ownership and read-only-first sequence documented | IMPLEMENTED_ON_DRAFT | Architecture only; combined runtime not implemented |
-| UWS ↔ HabitRoute M3 integration | [HabitRoute issue #13](https://github.com/Loofy147/HabitRoute/issues/13) | PR #14 implements a local slice | OPEN | Goal/task references remain opaque; live retrieval, authorization and evidence registration are absent |
+| UWS ↔ HabitRoute M3 integration | [HabitRoute issue #13](https://github.com/Loofy147/HabitRoute/issues/13) + [UWS issue #28](https://github.com/Loofy147/unified-knowledge-work-system/issues/28) | PR #14 implements a local slice; 2026-11-18 auth/storage audit completed | OPEN | No project-scoped service principal; protected UWS routes only accept user-session JWTs; no durable artifact-upload or idempotent service evidence receipt; host attestation remains local/unverified |
 | Authority-bound unknown-outcome reconciliation | [HabitRoute issue #15](https://github.com/Loofy147/HabitRoute/issues/15) | Required receipt and state-transition contract documented | OPEN | No provider-specific authenticated reconciliation adapter |
 
 **Default-branch rule:** work on PR branches must remain marked draft-only until merged. A passing test on a draft branch does not change the main-branch release status. The 2026-11-06 `CORE_STATUS.md` source baseline remains a dated default-branch snapshot; the table above is a later draft-evidence overlay, not a claim that those PRs are merged.
@@ -36,7 +36,7 @@ The combined runtime is an accepted architecture direction, not an implemented p
 1. **PR #10 — capability repertoire:** review/resolve the v0.3 base and its capability/host-boundary contracts.
 2. **PR #12 — per-operation durability:** review/resolve reducer invariants, attempt accounting, stable idempotency identity and crash windows. Unknown outcomes remain blocked pending reconciliation.
 3. **PR #14 — M3 read-only slice:** review/resolve its stacked lineage and separate integrity from completeness, semantic correctness and live UWS integration.
-4. **Issue #13 — live UWS connection:** add authenticated UWS goal retrieval, authorization and evidence registration. It depends on a qualified UWS HGSB read path; draft schema presence is not enough.
+4. **Issue #28 + issue #13 — live UWS connection:** first implement UWS project-scoped service identity, versioned goal reads, durable artifact transport and idempotent evidence receipts; then implement HabitRoute's host attestation/client. HGSB schema presence and a local evidence digest are not enough.
 5. **Issue #15 — authority-bound reconciliation:** complete provider/host receipt validation before any non-repeatable side effect can be retried.
 6. **CPM import and thin runtime composition:** defer until source digest, license notices, original tests and independent installability have been reviewed. CPM is not a dependency for the first read-only Git slice unless a concrete requirement proves otherwise.
 
@@ -48,7 +48,7 @@ Do not merge in an order that silently imports divergent draft histories. Confir
 
 PR #14 preserves UWS goal/task IDs as opaque references. This is useful provenance, but it does not prove that a current user owns the goal, that the goal is current, or that its acceptance criteria were retrieved.
 
-**Change required:** introduce a versioned read-only UWS GoalReference/TaskBrief response with owner/workspace scope, exact revision, acceptance criteria, evidence refs, freshness and authorization outcome. HabitRoute must reject missing, stale or cross-owner references.
+**Change required:** introduce a project-pinned UWS service principal with explicit `goal:read` and `evidence:append` scopes, revocation and expiry. Do not reuse a user's HS256 session JWT as a service credential. Expose a versioned read-only GoalReference/TaskBrief response with owner/project scope, exact HGSB and plan revisions, acceptance criteria, evidence refs, freshness and authorization outcome. HabitRoute must reject missing, stale, expired, revoked or cross-project references.
 
 ### R2 — HostCapabilitySnapshot is not an authenticated permission grant
 
@@ -107,8 +107,10 @@ No status should silently imply the next level.
 
 ### M3.1 — Close the live read-only UWS handoff
 
-- [ ] Identify the authenticated UWS principal and project/goal revision.
-- [ ] Fetch the authorized task brief through a documented UWS read API.
+- [ ] Issue #28: create/revoke a project-pinned UWS service credential with minimal scopes and hashed-at-rest secret; never use user-session impersonation.
+- [ ] Issue #28: fetch an owner-authorized, versioned task brief with exact goal, state and plan revisions.
+- [ ] Issue #28: persist artifact bytes durably and register evidence with an immutable, idempotent receipt.
+- [ ] HabitRoute: authenticate the actual host capability snapshot (issuer, subject, repository, version, READ_ONLY effect, scope and expiry) and verify immediately before Git invocation.
 - [ ] Verify owner, scope, revision and freshness before planning.
 - [ ] Bind the exact repository identity and immutable base/target commits.
 - [ ] Obtain and verify the authenticated host permission snapshot.
