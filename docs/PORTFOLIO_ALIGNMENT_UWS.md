@@ -169,7 +169,7 @@ No status should silently imply the next level.
 
 ## 9. References
 
-- [UWS portfolio roadmap and review checklist](https://github.com/Loofy147/unified-knowledge-work-system/blob/feat/human-machine-twin-foundation-v0.1/docs/PORTFOLIO_ROADMAP_AND_REVIEW_CHECKLIST_v0.1.md)
+- [UWS portfolio roadmap and review checklist](https://github.com/Loofy147/unified-knowledge-work-system/blob/docs/portfolio-review-roadmap-v0.1/docs/PORTFOLIO_ROADMAP_AND_REVIEW_CHECKLIST_v0.1.md)
 - [UWS Human–Machine Twin PR #24](https://github.com/Loofy147/unified-knowledge-work-system/pull/24)
 - [UWS HGSB PR #23](https://github.com/Loofy147/unified-knowledge-work-system/pull/23)
 - [HabitRoute PR #10](https://github.com/Loofy147/HabitRoute/pull/10)
