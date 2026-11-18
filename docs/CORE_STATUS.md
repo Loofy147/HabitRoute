@@ -4,6 +4,29 @@
 **Observed source baseline:** `43d714c8760a15026e0acb966919f483d893e7d0`  
 **Package:** `habitroute` 0.1.0.dev0 (experimental; not a stable production runtime)
 
+## Portfolio evidence overlay — 2026-11-18
+
+This overlay updates cross-repository draft evidence without changing the historical default-branch source baseline above. It does not mean draft work is merged.
+
+| Work | Current evidence | Status | Remaining boundary |
+|---|---|---|---|
+| Per-operation checkpoints | [PR #12](https://github.com/Loofy147/HabitRoute/pull/12), head `c505d96fe011f94af8eae90fab84f6ebcf317c81`; recorded run 42703942809, 93/93 each on Python 3.11–3.13 | IMPLEMENTED_ON_DRAFT; CI_VERIFIED | Unmerged; local JSONL; provider-side unknown-outcome reconciliation not implemented |
+| Capability repertoire | [PR #10](https://github.com/Loofy147/HabitRoute/pull/10), head `dd9d88e45b2bfd2dfeaa0130439838181ccc8c15` | IMPLEMENTED_ON_DRAFT | Unmerged; planner output is not permission |
+| M3 read-only repository review | [PR #14](https://github.com/Loofy147/HabitRoute/pull/14), head `b7055142e5d10d656161a667db150fc2fea487e7`; recorded run 43221871510 passed Python 3.11–3.13 and Windows journal qualification | IMPLEMENTED_ON_DRAFT; CI_VERIFIED | Unmerged; local-only; no live UWS retrieval/authorization/evidence registration; no semantic correctness or project-test claim |
+| UWS integration | [Issue #13](https://github.com/Loofy147/HabitRoute/issues/13) | OPEN | UWS references are opaque; host capability snapshot is not cryptographically authenticated |
+| Unknown-outcome reconciliation | [Issue #15](https://github.com/Loofy147/HabitRoute/issues/15) | OPEN | No provider-specific authority-bound receipt validation |
+| CPM integration | [CPM integration plan](CPM_INTEGRATION_PLAN.md) | NOT_STARTED | Source provenance, complete notices, isolation and independent-installability gates remain |
+
+### Current assessment
+
+- The strongest verified HabitRoute result is a **local read-only repository-review slice on PR #14**, not an end-to-end UWS-connected product.
+- PR #14 independently validates Git-object/inventory integrity and records incomplete content separately. It does not perform semantic code review, run project tests, or authenticate host authority.
+- The PR #12 per-operation checkpoint implementation narrows the local crash-replay gap for machine-habit operations. It does not solve provider reconciliation, exactly-once effects or multi-host coordination.
+- PR #10, #12 and #14 remain open draft PRs. The default branch remains experimental and must not be described as having these changes until merge and fresh default-branch verification.
+- The review/merge dependency is #10 capability repertoire → #12 operation durability (review as a separate dependency) → #14 M3 integration, while UWS PR #23 HGSB read/authorization gates must be met before issue #13 can become a live cross-system flow.
+
+The latest repository alignment and acceptance checklist is maintained in [Portfolio Alignment — UWS and HabitRoute](PORTFOLIO_ALIGNMENT_UWS.md). The cross-project review framework is in the [UWS portfolio roadmap and review checklist](https://github.com/Loofy147/unified-knowledge-work-system/blob/feat/human-machine-twin-foundation-v0.1/docs/PORTFOLIO_ROADMAP_AND_REVIEW_CHECKLIST_v0.1.md).
+
 ## Canonical machine-habit core
 
 ### `src/habitroute/machine.py`
