@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -602,7 +603,7 @@ class SQLiteFlowJournal:
                     (run_id, flow_id, definition_version, context_raw, digest),
                 )
             db.execute("COMMIT")
-        return True
+        return not bool(existing)
 
     def load_initial_context(self, run_id: str, flow_id: str, definition_version: int) -> dict[str, str]:
         with self._connect() as db:
