@@ -512,6 +512,8 @@ class SQLiteFlowJournal:
     def finish_invocation(self, idempotency_key: str, status: str, error: str | None = None) -> None:
         if status not in {"succeeded", "failed", "unknown"}:
             raise ValueError("invalid invocation terminal status")
+        if error is not None and not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", error):
+            error = "adapter_error_redacted"
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
@@ -583,9 +585,8 @@ class SQLiteFlowJournal:
             ).fetchone()
             if existing and (
                 existing["flow_id"] != flow_id or existing["definition_version"] != definition_version
-                or existing["context_sha256"] != digest
             ):
-                raise IdempotencyConflict("initial flow context is immutable for a run")
+                raise IdempotencyConflict("a run cannot change its pinned flow definition")
             self._audit(db, "trigger_accepted", {
                 "trigger_id": trigger_id, "payload_sha256": payload_sha256, "run_id": run_id,
                 "flow_id": flow_id, "definition_version": definition_version,
