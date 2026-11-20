@@ -473,6 +473,11 @@ class SQLiteFlowJournal:
                 if row["status"] == "failed" and effect not in safe_effects:
                     db.execute("COMMIT")
                     return InvocationClaim(False, row["attempt"], "unsafe_retry_blocked")
+                if row["status"] not in {"failed", "not_applied"}:
+                    db.execute("COMMIT")
+                    return InvocationClaim(False, row["attempt"], "invalid_invocation_state")
+                # A provider-verified not_applied reconciliation is safe even for
+                # non-repeatable effects; ordinary failures still need retry-safe semantics.
                 attempt = row["attempt"] + 1
                 db.execute(
                     "UPDATE invocations SET status='running', attempt=?, last_error=NULL WHERE idempotency_key=?",
@@ -518,11 +523,13 @@ class SQLiteFlowJournal:
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
-                "SELECT capability_id, operation_ref, attempt FROM invocations WHERE idempotency_key=?",
+                "SELECT capability_id, operation_ref, attempt, status FROM invocations WHERE idempotency_key=?",
                 (idempotency_key,),
             ).fetchone()
             if row is None:
                 raise KeyError("invocation reservation not found")
+            if row["status"] != "running":
+                raise ValueError("only a running invocation can accept its first result")
             db.execute(
                 "UPDATE invocations SET status=?, last_error=? WHERE idempotency_key=?",
                 (status, error, idempotency_key),
