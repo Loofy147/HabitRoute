@@ -278,8 +278,9 @@ class HarnessBoundaryTests(unittest.TestCase):
             snapshot_verifier=verifier,
         )
         step = OperationStep(
-            op_ref, OperationEffect.NON_REPEATABLE if destructive else (
-                OperationEffect.IDEMPOTENT if external else OperationEffect.IDEMPOTENT
+            op_ref,
+            OperationEffect.NON_REPEATABLE if destructive else (
+                OperationEffect.READ_ONLY if external else OperationEffect.IDEMPOTENT
             ),
             idempotency_key_supported=external,
         )
