@@ -22,6 +22,13 @@ A flow owns progress. A habit owns reuse/optimization. A harness owns the execut
 
 The worker exists, but it is not a distributed workflow service and its multi-operation habit path does not yet commit an individual flow checkpoint for each completed operation. See [core status](docs/CORE_STATUS.md) and the [repository assessment](docs/HABITROUTE_ASSESSMENT.md).
 
+## Autonomous runtime security
+
+- `src/habitroute/autonomy/` — scoped short-lived capability tokens, attenuated delegation with aggregate ancestor budgets, deterministic idempotency, a SQLite-backed FlowJournal with Merkle audit, immutable trigger hydration, an egress-enforcing HarnessAdapter, provider-verified recovery gates, and shadow-replay/Control Plane promotion checks.
+- [Autonomous Runtime Security Constitution](docs/AUTONOMOUS_RUNTIME_SECURITY.md) — implementation contracts, integration example, production adapter requirements and explicit trust boundaries.
+
+This is a reference enforcement layer, not a claim that production infrastructure is already deployed. External operations fail closed without an egress proxy; destructive operations require provider-verified recovery evidence; high-risk external operations can require an independently anchored audit head. The local HMAC broker is for tests/prototypes, not production key management. The SQLite journal is a local trust-boundary store, not a distributed workflow service.
+
 ## Research and design
 
 - [Machine habits, harnesses and persistent flows](docs/MACHINE_HABITS_AND_FLOWS.md)
