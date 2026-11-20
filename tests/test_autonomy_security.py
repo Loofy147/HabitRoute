@@ -28,10 +28,10 @@ from habitroute.machine import (
 
 
 class StubHarness:
-    def __init__(self, operations, result=None):
+    def __init__(self, operations, result=None, approval_required=()):
         self.profile = HarnessProfile(
             "test-harness", "1", "test", "security-suite",
-            frozenset(operations), frozenset(), 3, False,
+            frozenset(operations), frozenset(approval_required), 3, False,
         )
         self.result = result or HarnessOperationResult(OperationOutcome.SUCCEEDED)
         self.calls = []
@@ -57,6 +57,11 @@ class StubEgress:
 class GoodSnapshotVerifier:
     def verify(self, evidence):
         return evidence.receipt == "verified-provider-receipt"
+
+
+class GoodReconciliationVerifier:
+    def verify(self, evidence):
+        return evidence.receipt == "provider-signed-reconciliation"
 
 
 class GoodApprovalVerifier:
@@ -206,6 +211,41 @@ class JournalTests(unittest.TestCase):
                     capability_id="child-b", idempotency_key="child-b-key", **common
                 )
 
+    def test_terminal_invocation_state_cannot_be_rewritten(self):
+        with tempfile.TemporaryDirectory() as temp:
+            journal = SQLiteFlowJournal(Path(temp) / "ledger.sqlite3")
+            params = dict(
+                capability_id="cap-1", idempotency_key="terminal-key",
+                operation_ref="repo.read", effect="idempotent",
+                input_sha256=hashlib.sha256(b"{}").hexdigest(),
+                estimated_cost=1.0, max_calls=3, max_cost=3.0,
+            )
+            self.assertTrue(journal.claim_invocation(**params).executable)
+            journal.finish_invocation("terminal-key", "succeeded")
+            with self.assertRaisesRegex(ValueError, "running invocation"):
+                journal.finish_invocation("terminal-key", "failed")
+
+    def test_provider_verified_not_applied_can_resume_nonrepeatable(self):
+        with tempfile.TemporaryDirectory() as temp:
+            journal = SQLiteFlowJournal(Path(temp) / "ledger.sqlite3")
+            params = dict(
+                capability_id="cap-1", idempotency_key="reconcile-key",
+                operation_ref="repo.delete", effect="non_repeatable",
+                input_sha256=hashlib.sha256(b"{}").hexdigest(),
+                estimated_cost=1.0, max_calls=3, max_cost=3.0,
+            )
+            self.assertTrue(journal.claim_invocation(**params).executable)
+            journal.finish_invocation("reconcile-key", "unknown", "lost_ack")
+            evidence = ReconciliationEvidence(
+                "cap-1", "reconcile-key", "provider", "receipt:123",
+                "verifier", False, int(time.time()), "provider-signed-reconciliation",
+            )
+            self.assertEqual(
+                journal.reconcile_invocation(evidence, GoodReconciliationVerifier()),
+                "not_applied",
+            )
+            self.assertTrue(journal.claim_invocation(**params).executable)
+
     def test_secret_bearing_context_is_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
             journal = SQLiteFlowJournal(Path(temp) / "ledger.sqlite3")
@@ -241,7 +281,7 @@ class TriggerTests(unittest.TestCase):
 
 class HarnessBoundaryTests(unittest.TestCase):
     def make_adapter(self, temp, *, external=True, proxy=None, result=None,
-                     destructive=False, recovery=False):
+                     destructive=False, recovery=False, profile_approval=False):
         op_ref = "repo.read" if not destructive else "repo.delete"
         host = "api.example.test" if external else "local"
         resource = "https://api.example.test/v1/project" if external else "/project/database"
@@ -250,7 +290,9 @@ class HarnessBoundaryTests(unittest.TestCase):
             "inner", "1", "test", "runtime", frozenset({op_ref}),
             frozenset(), 3, False,
         )
-        inner = StubHarness({op_ref}, result)
+        inner = StubHarness(
+            {op_ref}, result, approval_required={op_ref} if profile_approval else (),
+        )
         broker = HmacCapabilityBroker(b"z" * 32)
         token = broker.mint_root(
             subject="test-worker", task_id="task-1", operations={op_ref},
@@ -327,6 +369,25 @@ class HarnessBoundaryTests(unittest.TestCase):
             result = adapter.invoke(step, {}, idempotency_key="delete-2")
             self.assertEqual(result.outcome, OperationOutcome.SUCCEEDED)
             self.assertEqual(len(inner.calls), 1)
+
+    def test_harness_profile_approval_cannot_be_bypassed_at_adapter_boundary(self):
+        with tempfile.TemporaryDirectory() as temp:
+            proxy = StubEgress()
+            adapter, inner, step, _ = self.make_adapter(
+                temp, proxy=proxy, profile_approval=True,
+            )
+            with self.assertRaises(OperationNotExecuted):
+                adapter.invoke(step, {}, idempotency_key="profile-approval")
+            self.assertEqual(proxy.calls, [])
+            self.assertEqual(inner.calls, [])
+
+    def test_external_post_requires_destructive_recovery_classification(self):
+        with self.assertRaisesRegex(ValueError, "non-read-only HTTP methods"):
+            OperationDescriptor(
+                "repo.action", "api.example.test",
+                "https://api.example.test/v1/project/action",
+                external=True, method="POST", destructive=False,
+            )
 
     def test_secret_inputs_are_rejected_before_dispatch(self):
         with tempfile.TemporaryDirectory() as temp:
