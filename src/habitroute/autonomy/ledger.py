@@ -145,6 +145,14 @@ class IdempotencyConflict(ValueError):
     pass
 
 
+class _ClosingConnection(sqlite3.Connection):
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            return super().__exit__(exc_type, exc, tb)
+        finally:
+            self.close()
+
+
 class SQLiteFlowJournal:
     """FlowJournal-compatible SQLite store with transactionally paired audit leaves."""
 
@@ -164,6 +172,8 @@ class SQLiteFlowJournal:
                 CREATE TABLE IF NOT EXISTS flow_events(
                     run_id TEXT NOT NULL, sequence INTEGER NOT NULL, event_id TEXT NOT NULL UNIQUE,
                     body TEXT NOT NULL, PRIMARY KEY(run_id, sequence));
+                CREATE TABLE IF NOT EXISTS audit_action_ids(
+                    action_id TEXT PRIMARY KEY, sequence INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS audit_entries(
                     sequence INTEGER PRIMARY KEY AUTOINCREMENT, body TEXT NOT NULL, leaf_hash BLOB NOT NULL);
                 CREATE TABLE IF NOT EXISTS audit_anchors(
@@ -196,13 +206,21 @@ class SQLiteFlowJournal:
                     BEFORE UPDATE ON audit_anchors BEGIN SELECT RAISE(ABORT, 'append-only anchors'); END;
                 CREATE TRIGGER IF NOT EXISTS audit_anchors_no_delete
                     BEFORE DELETE ON audit_anchors BEGIN SELECT RAISE(ABORT, 'append-only anchors'); END;
+                CREATE TRIGGER IF NOT EXISTS trigger_receipts_no_update
+                    BEFORE UPDATE ON trigger_receipts BEGIN SELECT RAISE(ABORT, 'append-only triggers'); END;
+                CREATE TRIGGER IF NOT EXISTS trigger_receipts_no_delete
+                    BEFORE DELETE ON trigger_receipts BEGIN SELECT RAISE(ABORT, 'append-only triggers'); END;
+                CREATE TRIGGER IF NOT EXISTS flow_initial_context_no_update
+                    BEFORE UPDATE ON flow_initial_context BEGIN SELECT RAISE(ABORT, 'immutable initial context'); END;
+                CREATE TRIGGER IF NOT EXISTS flow_initial_context_no_delete
+                    BEFORE DELETE ON flow_initial_context BEGIN SELECT RAISE(ABORT, 'immutable initial context'); END;
             """)
         for item in (self.path, Path(str(self.path) + "-wal"), Path(str(self.path) + "-shm")):
             if item.exists() and not item.is_symlink():
                 os.chmod(item, 0o600)
 
     def _connect(self) -> sqlite3.Connection:
-        db = sqlite3.connect(str(self.path), timeout=self.timeout, isolation_level=None)
+        db = sqlite3.connect(str(self.path), timeout=self.timeout, isolation_level=None, factory=_ClosingConnection)
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA synchronous=FULL")
         db.execute("PRAGMA foreign_keys=ON")
@@ -355,13 +373,84 @@ class SQLiteFlowJournal:
             ).fetchone()
         return row is not None
 
+
+    def append_audit(self, action_id: str, kind: str, body: dict[str, object]) -> int:
+        """Append one idempotent audit action without storing bearer credentials."""
+        if not action_id or not kind:
+            raise ValueError("audit action_id and kind are required")
+        safe = {"kind": kind, **body}
+        _check_safe(safe)
+        raw = _canonical(safe)
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            prior = db.execute(
+                "SELECT sequence FROM audit_action_ids WHERE action_id=?", (action_id,)
+            ).fetchone()
+            if prior:
+                row = db.execute(
+                    "SELECT body FROM audit_entries WHERE sequence=?", (prior["sequence"],)
+                ).fetchone()
+                if row is None or row["body"] != raw:
+                    raise IdempotencyConflict("audit action ID reused with different content")
+                db.execute("COMMIT")
+                return int(prior["sequence"])
+            cursor = db.execute(
+                "INSERT INTO audit_entries(body, leaf_hash) VALUES(?, ?)", (raw, _leaf(raw))
+            )
+            sequence = int(cursor.lastrowid)
+            db.execute(
+                "INSERT INTO audit_action_ids(action_id, sequence) VALUES(?, ?)",
+                (action_id, sequence),
+            )
+            db.execute("COMMIT")
+            return sequence
+
+    def publish_audit_head(self, anchor: AuditAnchor) -> AuditHead:
+        """Publish and persist a separately verified external tree-head receipt."""
+        head = self.audit_head()
+        receipt = anchor.publish(head)
+        if not isinstance(receipt, str) or not receipt or not anchor.verify(head, receipt):
+            raise PermissionError("external audit anchor receipt failed verification")
+        digest = hashlib.sha256(receipt.encode()).hexdigest()
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            existing = db.execute(
+                "SELECT root_hash, receipt_sha256 FROM audit_anchors WHERE tree_size=?",
+                (head.tree_size,),
+            ).fetchone()
+            if existing and (existing["root_hash"] != head.root_hash or existing["receipt_sha256"] != digest):
+                raise IdempotencyConflict("different external receipt already stored for this tree size")
+            db.execute(
+                "INSERT OR IGNORE INTO audit_anchors(tree_size,root_hash,receipt,receipt_sha256) VALUES(?,?,?,?)",
+                (head.tree_size, head.root_hash, receipt, digest),
+            )
+            db.execute("COMMIT")
+        return head
+
+    def has_current_external_anchor(self, anchor: AuditAnchor | None) -> bool:
+        if anchor is None:
+            return False
+        head = self.audit_head()
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT root_hash, receipt FROM audit_anchors WHERE tree_size=?",
+                (head.tree_size,),
+            ).fetchone()
+        return bool(
+            row and row["root_hash"] == head.root_hash
+            and anchor.verify(head, row["receipt"])
+        )
+
+    def require_current_external_anchor(self, anchor: AuditAnchor | None) -> None:
+        if not self.has_current_external_anchor(anchor):
+            raise PermissionError("current Merkle head lacks an independently verified external anchor")
+
     def claim_invocation(
         self, *, capability_id: str, idempotency_key: str, operation_ref: str,
         effect: str, input_sha256: str, estimated_cost: float,
         max_calls: int, max_cost: float,
         budget_chain: Iterable[tuple[str, int, float]] = (),
     ):
-        from .ledger import InvocationClaim
         if not re.fullmatch(r"[0-9a-f]{64}", input_sha256):
             raise ValueError("input_sha256 must be a SHA-256 digest")
         if not math.isfinite(estimated_cost) or estimated_cost < 0:
