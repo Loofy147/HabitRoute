@@ -67,8 +67,8 @@ class OperationDescriptor:
                 raise ValueError("external URL authority must exactly match host")
         elif parsed.scheme or parsed.netloc:
             raise ValueError("absolute network URLs must be marked external")
-        if method in {"PUT", "PATCH", "DELETE"} and not self.destructive:
-            raise ValueError("mutating HTTP methods require a destructive recovery gate")
+        if method in {"POST", "PUT", "PATCH", "DELETE"} and not self.destructive:
+            raise ValueError("non-read-only HTTP methods require a destructive recovery gate")
         if method in {"GET", "HEAD"} and self.destructive:
             raise ValueError("destructive operation cannot use a read-only HTTP method")
         if not math.isfinite(self.cost_units) or self.cost_units < 0:
@@ -221,11 +221,16 @@ class PolicyEnforcedHarnessAdapter:
                 )
             except Exception:
                 approval_ok = False
+        requires_approval = (
+            descriptor.approval_required
+            or descriptor.operation_ref in self._inner.profile.approval_required
+            or descriptor.operation_ref in claims.approval_required
+        )
         decision = evaluate_capability(
             claims,
             PolicyRequest(
                 descriptor.operation_ref, descriptor.host, descriptor.resource,
-                descriptor.cost_units, descriptor.approval_required,
+                descriptor.cost_units, requires_approval,
             ),
             approval_verified=approval_ok,
         )
