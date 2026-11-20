@@ -39,7 +39,7 @@ def hydrate_trigger(
     """Atomically claim trigger and pin first context; reconstruct state from journal."""
     if not definition.flow_id or definition.version < 1:
         raise ValueError("invalid pinned flow definition")
-    journal.claim_trigger(
+    first_delivery = journal.claim_trigger(
         trigger_id=envelope.trigger_id,
         payload_sha256=envelope.payload_sha256,
         run_id=envelope.run_id,
@@ -50,7 +50,7 @@ def hydrate_trigger(
     events = journal.load(envelope.run_id)
     if events:
         return TriggerHydration(
-            PersistentFlow.restore(definition, envelope.run_id, journal), False,
+            PersistentFlow.restore(definition, envelope.run_id, journal), first_delivery,
         )
     pinned_context = journal.load_initial_context(
         envelope.run_id, definition.flow_id, definition.version,
@@ -63,4 +63,4 @@ def hydrate_trigger(
         if not committed:
             raise
         flow = PersistentFlow.restore(definition, envelope.run_id, journal)
-    return TriggerHydration(flow, len(events) == 0)
+    return TriggerHydration(flow, first_delivery)
