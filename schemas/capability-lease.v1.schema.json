@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://habitroute.dev/schemas/capability-lease.v1.json",
+  "title": "HabitRoute Capability Lease v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["lease_id", "subject", "task_id", "hosts", "operations", "resources", "issued_at", "expires_at", "budget_units", "depth", "parent_lease_id"],
+  "properties": {
+    "lease_id": {"type": "string", "minLength": 1},
+    "subject": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "hosts": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "operations": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "resources": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "issued_at": {"type": "number"},
+    "expires_at": {"type": "number"},
+    "budget_units": {"type": "number", "exclusiveMinimum": 0},
+    "depth": {"type": "integer", "minimum": 0, "maximum": 3},
+    "parent_lease_id": {"type": ["string", "null"]}
+  },
+  "allOf": [
+    {"if": {"properties": {"depth": {"const": 0}}}, "then": {"properties": {"parent_lease_id": {"type": "null"}}}},
+    {"if": {"properties": {"depth": {"minimum": 1}}}, "then": {"properties": {"parent_lease_id": {"type": "string", "minLength": 1}}}}
+  ]
+}
