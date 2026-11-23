@@ -1,0 +1,55 @@
+services:
+  agent:
+    build:
+      context: ./agent
+    depends_on:
+      - envoy
+    networks:
+      - agent_net
+    restart: "no"
+    # No direct route to the policy or upstream networks.
+
+  envoy:
+    image: envoyproxy/envoy:v1.40.2
+    command: ["-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
+    ports:
+      - "127.0.0.1:10000:10000"
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml:ro
+    depends_on:
+      - opa
+      - echo
+    networks:
+      - agent_net
+      - policy_net
+      - upstream_net
+    restart: unless-stopped
+
+  opa:
+    image: openpolicyagent/opa:1.22.4-envoy-2
+    command:
+      - run
+      - --server
+      - --config-file=/config/opa.yaml
+      - /policy/authz.rego
+    volumes:
+      - ./opa.yaml:/config/opa.yaml:ro
+      - ./policy:/policy:ro
+    networks:
+      - policy_net
+    restart: unless-stopped
+
+  echo:
+    build:
+      context: ./echo
+    networks:
+      - upstream_net
+    restart: unless-stopped
+
+networks:
+  agent_net:
+    internal: true
+  policy_net:
+    internal: true
+  upstream_net:
+    internal: true
