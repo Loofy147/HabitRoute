@@ -283,7 +283,7 @@ class TriggerTests(unittest.TestCase):
 class HarnessBoundaryTests(unittest.TestCase):
     def make_adapter(self, temp, *, external=True, proxy=None, result=None,
                      destructive=False, recovery=False, profile_approval=False,
-                     method_override=None, effect_override=None):
+                     method_override=None, effect_override=None, approval_request=None):
         op_ref = "repo.read" if not destructive else "repo.delete"
         host = "api.example.test" if external else "local"
         resource = "https://api.example.test/v1/project" if external else "/project/database"
