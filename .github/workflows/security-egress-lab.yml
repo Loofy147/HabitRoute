@@ -1,0 +1,30 @@
+name: security-egress-lab
+
+on:
+  pull_request:
+    paths:
+      - "deploy/security-lab/**"
+      - ".github/workflows/security-egress-lab.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "deploy/security-lab/**"
+      - ".github/workflows/security-egress-lab.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  egress-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run isolated Envoy + OPA boundary test
+        run: docker compose -f deploy/security-lab/compose.yaml up --build --abort-on-container-exit --exit-code-from agent
+      - name: Collect service logs
+        if: always()
+        run: docker compose -f deploy/security-lab/compose.yaml logs --no-color
+      - name: Tear down
+        if: always()
+        run: docker compose -f deploy/security-lab/compose.yaml down --volumes --remove-orphans
