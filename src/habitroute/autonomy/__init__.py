@@ -16,6 +16,7 @@ from .ledger import (
 )
 from .worker import (
     ApprovalEvidence, OperationDescriptor, PolicyEnforcedHarnessAdapter, RecoveryPlan,
+    approval_request_sha256,
 )
 from .runtime import TriggerEnvelope, TriggerHydration, hydrate_trigger
 
@@ -30,5 +31,6 @@ __all__ = [
     "ReconciliationVerifier", "SQLiteFlowJournal",
     "merkle_root", "verify_merkle_inclusion", "ApprovalEvidence",
     "OperationDescriptor", "PolicyEnforcedHarnessAdapter", "RecoveryPlan",
+    "approval_request_sha256",
     "TriggerEnvelope", "TriggerHydration", "hydrate_trigger",
 ]
