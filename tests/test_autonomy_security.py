@@ -18,7 +18,8 @@ from habitroute.autonomy.ledger import (
 )
 from habitroute.autonomy.runtime import TriggerEnvelope, hydrate_trigger
 from habitroute.autonomy.worker import (
-    OperationDescriptor, PolicyEnforcedHarnessAdapter, RecoveryPlan,
+    ApprovalEvidence, OperationDescriptor, PolicyEnforcedHarnessAdapter,
+    RecoveryPlan, approval_request_sha256,
 )
 from habitroute.flows import FlowDefinition, FlowNode, FlowNodeKind
 from habitroute.machine import (
@@ -314,18 +315,34 @@ class HarnessBoundaryTests(unittest.TestCase):
             )
             recovery_plans[op_ref] = RecoveryPlan(evidence, "workflow-1", 7, "a" * 64)
             verifier = GoodSnapshotVerifier()
-        adapter = PolicyEnforcedHarnessAdapter(
-            inner, broker=broker, capability_token=token,
-            descriptors={op_ref: descriptor}, journal=journal,
-            egress_proxy=proxy, recovery_plans=recovery_plans,
-            snapshot_verifier=verifier,
-        )
         step = OperationStep(
             op_ref,
             effect_override or (OperationEffect.NON_REPEATABLE if destructive else (
                 OperationEffect.READ_ONLY if external else OperationEffect.IDEMPOTENT
             )),
             idempotency_key_supported=external,
+        )
+        approvals = {}
+        approval_verifier = None
+        if approval_request is not None:
+            approval_inputs, approval_key = approval_request
+            claims = broker.verify(token)
+            approvals[op_ref] = ApprovalEvidence(
+                claims.capability_id, op_ref, host, resource, "test-approver",
+                "approval-1", int(time.time()) + 300,
+                approval_request_sha256(
+                    descriptor, step, approval_inputs, approval_key,
+                    recovery_plans.get(op_ref),
+                ),
+                "valid-approval-signature",
+            )
+            approval_verifier = GoodApprovalVerifier()
+        adapter = PolicyEnforcedHarnessAdapter(
+            inner, broker=broker, capability_token=token,
+            descriptors={op_ref: descriptor}, journal=journal,
+            egress_proxy=proxy, recovery_plans=recovery_plans,
+            snapshot_verifier=verifier, approval_evidence=approvals,
+            approval_verifier=approval_verifier,
         )
         return adapter, inner, step, journal
 
@@ -380,6 +397,25 @@ class HarnessBoundaryTests(unittest.TestCase):
             with self.assertRaises(OperationNotExecuted):
                 adapter.invoke(step, {}, idempotency_key="profile-approval")
             self.assertEqual(proxy.calls, [])
+            self.assertEqual(inner.calls, [])
+
+    def test_approval_is_bound_to_exact_inputs_and_idempotency_key(self):
+        with tempfile.TemporaryDirectory() as temp:
+            proxy = StubEgress()
+            approved_inputs = {"title": "approved issue"}
+            approved_key = "approved-run-1"
+            adapter, inner, step, _ = self.make_adapter(
+                temp, proxy=proxy, profile_approval=True,
+                approval_request=(approved_inputs, approved_key),
+            )
+            result = adapter.invoke(step, approved_inputs, idempotency_key=approved_key)
+            self.assertEqual(result.outcome, OperationOutcome.SUCCEEDED)
+            with self.assertRaises(OperationNotExecuted):
+                adapter.invoke(
+                    step, {"title": "different issue"},
+                    idempotency_key="different-run",
+                )
+            self.assertEqual(len(proxy.calls), 1)
             self.assertEqual(inner.calls, [])
 
     def test_reversible_external_post_does_not_require_destructive_snapshot(self):
