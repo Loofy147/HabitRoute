@@ -1,3 +1,4 @@
+import socket
 import time
 import urllib.error
 import urllib.request
@@ -22,6 +23,14 @@ def direct_route_is_blocked(url: str) -> bool:
         return True
 
 
+def direct_tcp_is_blocked(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=2):
+            return False
+    except OSError:
+        return True
+
+
 deadline = time.monotonic() + 45
 while True:
     try:
@@ -41,6 +50,6 @@ assert request("GET", f"{PROXY}/blocked") == 403
 # The agent is not attached to either network containing these services.
 assert direct_route_is_blocked("http://echo:8080/health")
 assert direct_route_is_blocked("http://opa:8181/health")
-assert direct_route_is_blocked("https://example.com")
+assert direct_tcp_is_blocked("1.1.1.1", 443)
 
 print("PASS: allowlist enforced; denied requests blocked; direct upstream, policy, and internet egress unavailable")
