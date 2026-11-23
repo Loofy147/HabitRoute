@@ -218,3 +218,22 @@ Source: https://docs.aws.amazon.com/durable-execution/patterns/best-practices/id
 ### What is engineering inference
 
 The three-entity model (Machine Habit, Execution Harness, Persistent Flow), the promotion gate, trace-discovery loop and proposed schema are HabitRoute design decisions inferred from these engineering patterns. The cited sources establish useful mechanisms and failure modes; they do not validate HabitRoute's eventual performance.
+
+## 11. Per-operation checkpoint extension (draft PR #12, 2026-11-09)
+
+The draft implementation adds operation-level events inside a multi-operation habit invocation:
+
+```text
+HABIT_OPERATION_STARTED
+  -> invoke exactly this operation through the HarnessAdapter
+  -> HABIT_OPERATION_SUCCEEDED | HABIT_OPERATION_FAILED | HABIT_OPERATION_UNKNOWN
+  -> only then proceed to the next operation
+```
+
+Each event carries the flow node, operation index/reference, stable idempotency key and attempt number. A successful result persists its outputs into flow context and advances the operation cursor. A known failure clears the pending intent but retains the attempt count; retries use the same idempotency key. A successful checkpoint survives a worker restart, so the next dispatch resumes at the next operation rather than rerunning completed work. The operation cursor and per-operation attempt map are reset when a flow advances to a new node, but preserved when the same node is retried.
+
+If a process restarts with an intent but no result, the worker preserves the pending operation and moves the flow to `NEEDS_ATTENTION`. It does not automatically call the adapter again. An explicit provider-specific reconciliation path remains future work; the local event journal cannot determine whether an external provider applied an effect when its acknowledgement was lost.
+
+**Verification evidence:** draft PR https://github.com/Loofy147/HabitRoute/pull/12, commit `5e6e4a85a0bcc34dc36e90a966f1411a74112b5d`, Actions run https://github.com/Loofy147/HabitRoute/actions/runs/42703779821; 93/93 tests passed on Python 3.11, 3.12 and 3.13.
+
+**Limits remain:** local JSONL single-writer persistence, no distributed leases, no provider-backed reconciliation, no exactly-once external-effect guarantee, and no production adapter. The patch remains under review and is not yet part of `main`.

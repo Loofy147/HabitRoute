@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 import math
-from typing import Mapping, Protocol
+from typing import Callable, Mapping, Protocol
 
 
 class OperationEffect(str, Enum):
@@ -379,16 +379,25 @@ def execute_machine_habit(
     *,
     run_id: str,
     approved_operations: frozenset[str] = frozenset(),
+    start_index: int = 0,
+    attempts_by_index: Mapping[int, int] | None = None,
+    on_operation_started: Callable[[int, OperationStep, str, int], None] | None = None,
+    on_operation_result: Callable[
+        [int, OperationStep, str, int, HarnessOperationResult], None
+    ] | None = None,
 ) -> MachineHabitExecutionResult:
-    """Execute one authorized machine habit through a provider-neutral harness.
+    """Execute a habit, optionally committing each operation through callbacks.
 
-    Retries reuse the same idempotency key for one logical operation step. Unknown
-    outcomes and incomplete postconditions stop the habit for reconciliation.
+    When callbacks are supplied, the caller can durably record an operation intent
+    before invocation and its outcome before the next operation starts. A pending
+    intent without a result must be reconciled by the caller after recovery; this
+    function deliberately does not infer that an operation is safe to replay.
     """
     state = dict(initial_state)
     records: list[OperationExecutionRecord] = []
     total_duration = 0.0
     total_resources = 0.0
+    prior_attempts = dict(attempts_by_index or {})
 
     def result(status: MachineExecutionStatus, reason: str) -> MachineHabitExecutionResult:
         return MachineHabitExecutionResult(
@@ -398,6 +407,8 @@ def execute_machine_habit(
 
     if not run_id.strip():
         return result(MachineExecutionStatus.HANDOFF, "run_id_required")
+    if start_index < 0 or start_index > len(habit.operations):
+        return result(MachineExecutionStatus.HANDOFF, "invalid_operation_checkpoint")
 
     authorization = authorize_machine_habit(
         habit, harness.profile, state, approved_operations
@@ -405,7 +416,8 @@ def execute_machine_habit(
     if not authorization.eligible:
         return result(MachineExecutionStatus.HANDOFF, authorization.reason)
 
-    for index, operation in enumerate(habit.operations):
+    for index in range(start_index, len(habit.operations)):
+        operation = habit.operations[index]
         if operation.effect is OperationEffect.COMPENSATABLE:
             return result(
                 MachineExecutionStatus.HANDOFF,
@@ -423,18 +435,41 @@ def execute_machine_habit(
 
         idempotency_key = f"{run_id}:{habit.habit_id}:{habit.version}:{index}"
         attempts_limit = min(operation.max_attempts, harness.profile.max_step_attempts)
+        previous_attempts = prior_attempts.get(index, 0)
         operation_succeeded = False
 
-        for attempt in range(1, attempts_limit + 1):
+        if previous_attempts >= attempts_limit:
+            return result(MachineExecutionStatus.FAILED, "operation_attempts_exhausted")
+
+        for attempt in range(previous_attempts + 1, attempts_limit + 1):
+            if on_operation_started is not None:
+                on_operation_started(index, operation, idempotency_key, attempt)
             try:
                 observed = harness.invoke(
                     operation, inputs, idempotency_key=idempotency_key
                 )
             except Exception as exc:
+                observed = HarnessOperationResult(
+                    OperationOutcome.UNKNOWN,
+                    error_code=f"harness_adapter_exception:{type(exc).__name__}",
+                )
+                if on_operation_result is not None:
+                    on_operation_result(index, operation, idempotency_key, attempt, observed)
+                records.append(OperationExecutionRecord(
+                    operation.operation_ref, attempt, idempotency_key, observed.outcome,
+                    observed.duration_ms, observed.resource_units, observed.error_code,
+                ))
                 return result(
                     MachineExecutionStatus.NEEDS_ATTENTION,
-                    f"harness_adapter_exception:{type(exc).__name__}",
+                    observed.error_code or "operation_outcome_unknown",
                 )
+
+            # Persist the result before changing local state or invoking the next operation.
+            # If this callback fails, the prior durable intent remains and recovery must
+            # treat the external outcome as unknown rather than repeat the operation.
+            if on_operation_result is not None:
+                on_operation_result(index, operation, idempotency_key, attempt, observed)
+
             total_duration += observed.duration_ms
             total_resources += observed.resource_units
             records.append(OperationExecutionRecord(
@@ -445,20 +480,26 @@ def execute_machine_habit(
             if observed.outcome is OperationOutcome.SUCCEEDED:
                 state.update(dict(observed.outputs))
                 operation_succeeded = True
+                prior_attempts[index] = attempt
                 break
             if observed.outcome is OperationOutcome.UNKNOWN:
-                return result(MachineExecutionStatus.NEEDS_ATTENTION, "operation_outcome_unknown")
+                return result(
+                    MachineExecutionStatus.NEEDS_ATTENTION,
+                    observed.error_code or "operation_outcome_unknown",
+                )
+            prior_attempts[index] = attempt
             if operation.effect in (
                 OperationEffect.NON_REPEATABLE, OperationEffect.COMPENSATABLE
             ):
-                terminal = (
-                    MachineExecutionStatus.NEEDS_ATTENTION
-                    if operation.effect is OperationEffect.COMPENSATABLE
-                    else MachineExecutionStatus.FAILED
+                return result(
+                    MachineExecutionStatus.FAILED,
+                    "operation_not_safely_retryable",
                 )
-                return result(terminal, "operation_not_safely_retryable")
             if attempt == attempts_limit:
-                return result(MachineExecutionStatus.FAILED, "operation_attempts_exhausted")
+                return result(
+                    MachineExecutionStatus.FAILED,
+                    "operation_attempts_exhausted",
+                )
 
         if not operation_succeeded:
             return result(MachineExecutionStatus.FAILED, "operation_failed")
@@ -472,4 +513,3 @@ def execute_machine_habit(
             "postconditions_not_satisfied:" + ",".join(failed_postconditions),
         )
     return result(MachineExecutionStatus.SUCCEEDED, "habit_completed_and_verified")
-

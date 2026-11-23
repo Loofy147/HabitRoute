@@ -30,8 +30,8 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 - [x] Define operation-effect classes and stable idempotency keys.
 - [x] Implement a worker that dispatches operation nodes and exact-version habit nodes through a HarnessAdapter.
 - [x] Add worker tests for success, retry-key reuse, approval pause/resume, unknown outcomes, postcondition failure and exact-version habit lookup.
-- [ ] Commit a durable event/checkpoint after each operation inside a multi-operation habit.
-- [ ] Add fault injection after external side effects but before event acknowledgement.
+- [x] Commit a durable event/checkpoint after each operation inside a multi-operation habit (draft PR #12; 93 tests pass on Python 3.11–3.13; pending review/merge).
+- [x] Add fault injection after an external operation result but before event acknowledgement (draft PR #12; pending review/merge).
 
 **Gate:** ordinary flow state replays from committed events; per-operation durability for multi-step habits remains an open critical gate.
 
@@ -92,4 +92,4 @@ This roadmap separates the existing HabitRoute core from the broader Unified Age
 
 ## Immediate next task
 
-Begin with per-operation checkpoints and crash/recovery semantics in HabitRoute. In parallel, import CPM unchanged into the monorepo only after its source manifest and notices are reviewed. Do not build an autonomous side-effecting runtime before the durability gate passes.
+Per-operation checkpointing and local crash-window regression tests are implemented on draft PR #12 and pass the Python 3.11–3.13 CI matrix. Next, complete provider-specific reconciliation and the remaining P2 gates. In parallel, import CPM unchanged into the monorepo only after its source manifest and notices are reviewed. Do not build an autonomous side-effecting runtime before the full durability gate passes.

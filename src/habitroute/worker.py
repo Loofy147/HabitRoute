@@ -188,6 +188,25 @@ class FlowWorker:
         if habit.lifecycle is not MachineHabitStatus.ACTIVE:
             return self._attention(flow, "pinned_habit_not_active")
 
+        # A persisted intent without a persisted result is an ambiguous external
+        # outcome. Never replay it automatically after restore.
+        pending = flow.snapshot.pending_habit_operation
+        if pending is not None:
+            flow.needs_attention(
+                "unacknowledged_habit_operation_intent",
+                metadata={
+                    "operation_index": str(pending.operation_index),
+                    "operation_ref": pending.operation_ref,
+                    "idempotency_key": pending.idempotency_key,
+                    "attempt": str(pending.attempt),
+                },
+            )
+            return FlowDispatchResult(
+                DispatchStatus.NEEDS_ATTENTION,
+                node.node_id,
+                "unacknowledged_habit_operation_intent",
+            )
+
         # Check approval before any operation in the multi-step habit can run.
         for operation in habit.operations:
             if (
@@ -206,9 +225,39 @@ class FlowWorker:
             return self._attention(flow, authorization.reason)
 
         run_key = flow.idempotency_key
+
+        def operation_started(index, operation, idempotency_key, attempt):
+            flow.start_habit_operation(
+                index, operation.operation_ref, idempotency_key, attempt
+            )
+
+        def operation_result(index, operation, idempotency_key, attempt, observed):
+            if observed.outcome is OperationOutcome.SUCCEEDED:
+                flow.succeed_habit_operation(
+                    index, operation.operation_ref, idempotency_key, attempt,
+                    dict(observed.outputs),
+                )
+            elif observed.outcome is OperationOutcome.FAILED:
+                flow.fail_habit_operation(
+                    index, operation.operation_ref, idempotency_key, attempt,
+                    observed.error_code,
+                )
+            else:
+                flow.mark_habit_operation_unknown(
+                    index, operation.operation_ref, idempotency_key, attempt,
+                    observed.error_code,
+                )
+
         result = execute_machine_habit(
-            habit, self.harness, flow.snapshot.context_dict(),
-            run_id=run_key, approved_operations=self.approved_operations,
+            habit,
+            self.harness,
+            flow.snapshot.context_dict(),
+            run_id=run_key,
+            approved_operations=self.approved_operations,
+            start_index=flow.snapshot.habit_operation_index,
+            attempts_by_index=dict(flow.snapshot.habit_operation_attempts),
+            on_operation_started=operation_started,
+            on_operation_result=operation_result,
         )
         metadata = {
             "habit_id": habit.habit_id,

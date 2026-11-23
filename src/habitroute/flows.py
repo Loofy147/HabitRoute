@@ -48,6 +48,10 @@ class FlowEventKind(str, Enum):
     STEP_SUCCEEDED = "step_succeeded"
     STEP_FAILED = "step_failed"
     STEP_OUTCOME_UNKNOWN = "step_outcome_unknown"
+    HABIT_OPERATION_STARTED = "habit_operation_started"
+    HABIT_OPERATION_SUCCEEDED = "habit_operation_succeeded"
+    HABIT_OPERATION_FAILED = "habit_operation_failed"
+    HABIT_OPERATION_UNKNOWN = "habit_operation_unknown"
     BRANCH_RESOLVED = "branch_resolved"
     WAIT_RELEASED = "wait_released"
     PAUSED = "paused"
@@ -194,6 +198,14 @@ class FlowEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class PendingHabitOperation:
+    operation_index: int
+    operation_ref: str
+    idempotency_key: str
+    attempt: int
+
+
+@dataclass(frozen=True, slots=True)
 class FlowSnapshot:
     run_id: str
     flow_id: str
@@ -206,6 +218,9 @@ class FlowSnapshot:
     last_event_sequence: int = 0
     applied_event_ids: tuple[str, ...] = ()
     resume_status: FlowStatus | None = None
+    habit_operation_index: int = 0
+    habit_operation_attempts: tuple[tuple[int, int], ...] = ()
+    pending_habit_operation: PendingHabitOperation | None = None
 
     @classmethod
     def initial(
@@ -335,8 +350,12 @@ def apply_flow_event(
         context = snapshot.context_dict()
         context.update({key: value for key, value in payload.items() if not key.startswith("$meta.")})
         updated = replace(
-            snapshot, context=tuple(sorted(context.items())),
+            snapshot,
+            context=tuple(sorted(context.items())),
             completed_nodes=snapshot.completed_nodes + (node.node_id,),
+            habit_operation_index=0,
+            habit_operation_attempts=(),
+            pending_habit_operation=None,
         )
         updated = _settle_at_node(definition, updated, node.next_on_success)
     elif event.kind is FlowEventKind.STEP_FAILED:
@@ -350,11 +369,23 @@ def apply_flow_event(
         counts[node.node_id] = attempts
         updated = replace(snapshot, attempts=tuple(sorted(counts.items())))
         if attempts < node.max_attempts:
+            # Same flow node is being retried; preserve its operation cursor.
             updated = replace(updated, status=FlowStatus.RUNNING)
         elif node.next_on_failure is not None:
-            updated = _settle_at_node(definition, updated, node.next_on_failure)
+            updated = replace(
+                _settle_at_node(definition, updated, node.next_on_failure),
+                habit_operation_index=0,
+                habit_operation_attempts=(),
+                pending_habit_operation=None,
+            )
         else:
-            updated = replace(updated, status=FlowStatus.FAILED)
+            updated = replace(
+                updated,
+                status=FlowStatus.FAILED,
+                habit_operation_index=0,
+                habit_operation_attempts=(),
+                pending_habit_operation=None,
+            )
     elif event.kind is FlowEventKind.STEP_OUTCOME_UNKNOWN:
         if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
             raise ValueError("unknown outcome does not match current flow node")
@@ -362,6 +393,64 @@ def apply_flow_event(
         context.update({key: value for key, value in payload.items() if not key.startswith("$meta.")})
         updated = replace(snapshot, status=FlowStatus.NEEDS_ATTENTION,
                           context=tuple(sorted(context.items())))
+    elif event.kind is FlowEventKind.HABIT_OPERATION_STARTED:
+        if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
+            raise ValueError("habit operation intent does not match current flow node")
+        node = definition.node(snapshot.current_node)
+        if node.kind is not FlowNodeKind.HABIT or snapshot.pending_habit_operation is not None:
+            raise ValueError("habit operation intent requires a habit node with no pending operation")
+        operation_index = int(payload.get("$meta.operation_index", "-1"))
+        operation_ref = payload.get("$meta.operation_ref", "")
+        idempotency_key = payload.get("$meta.idempotency_key", "")
+        attempt = int(payload.get("$meta.attempt", "0"))
+        attempts = dict(snapshot.habit_operation_attempts)
+        if operation_index != snapshot.habit_operation_index:
+            raise ValueError("habit operation index does not match flow checkpoint")
+        if not operation_ref or not idempotency_key or attempt != attempts.get(operation_index, 0) + 1:
+            raise ValueError("invalid habit operation intent metadata")
+        attempts[operation_index] = attempt
+        pending = PendingHabitOperation(operation_index, operation_ref, idempotency_key, attempt)
+        updated = replace(
+            snapshot,
+            habit_operation_attempts=tuple(sorted(attempts.items())),
+            pending_habit_operation=pending,
+        )
+    elif event.kind in (FlowEventKind.HABIT_OPERATION_SUCCEEDED,
+                        FlowEventKind.HABIT_OPERATION_FAILED,
+                        FlowEventKind.HABIT_OPERATION_UNKNOWN):
+        if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
+            raise ValueError("habit operation result does not match current flow node")
+        node = definition.node(snapshot.current_node)
+        pending = snapshot.pending_habit_operation
+        operation_index = int(payload.get("$meta.operation_index", "-1"))
+        operation_ref = payload.get("$meta.operation_ref", "")
+        idempotency_key = payload.get("$meta.idempotency_key", "")
+        attempt = int(payload.get("$meta.attempt", "0"))
+        if node.kind is not FlowNodeKind.HABIT or pending is None:
+            raise ValueError("habit operation result has no matching pending intent")
+        if (operation_index, operation_ref, idempotency_key, attempt) != (
+            pending.operation_index, pending.operation_ref, pending.idempotency_key, pending.attempt
+        ):
+            raise ValueError("habit operation result does not match pending intent")
+        if event.kind is FlowEventKind.HABIT_OPERATION_SUCCEEDED:
+            context = snapshot.context_dict()
+            context.update({
+                key[len("output."):]: value
+                for key, value in payload.items()
+                if key.startswith("output.")
+            })
+            updated = replace(
+                snapshot,
+                context=tuple(sorted(context.items())),
+                habit_operation_index=snapshot.habit_operation_index + 1,
+                pending_habit_operation=None,
+            )
+        elif event.kind is FlowEventKind.HABIT_OPERATION_FAILED:
+            updated = replace(snapshot, pending_habit_operation=None)
+        else:
+            # Preserve the pending intent: the external effect may have happened,
+            # but its outcome is not proven. Recovery must reconcile, never replay.
+            updated = snapshot
     elif event.kind is FlowEventKind.BRANCH_RESOLVED:
         if snapshot.status is not FlowStatus.RUNNING or event.node_id != snapshot.current_node:
             raise ValueError("branch event does not match current flow node")
@@ -486,6 +575,72 @@ class PersistentFlow:
         payload.update({f"$meta.{key}": value for key, value in (metadata or {}).items()})
         return self._commit(
             FlowEventKind.STEP_OUTCOME_UNKNOWN, self.snapshot.current_node, payload
+        )
+
+    def _habit_operation_payload(
+        self, operation_index: int, operation_ref: str,
+        idempotency_key: str, attempt: int,
+        extra: Mapping[str, str] | None = None,
+    ) -> dict[str, str]:
+        payload = {
+            "$meta.operation_index": str(operation_index),
+            "$meta.operation_ref": operation_ref,
+            "$meta.idempotency_key": idempotency_key,
+            "$meta.attempt": str(attempt),
+        }
+        payload.update(extra or {})
+        return payload
+
+    def start_habit_operation(
+        self, operation_index: int, operation_ref: str,
+        idempotency_key: str, attempt: int,
+    ) -> FlowSnapshot:
+        return self._commit(
+            FlowEventKind.HABIT_OPERATION_STARTED,
+            self.snapshot.current_node,
+            self._habit_operation_payload(
+                operation_index, operation_ref, idempotency_key, attempt
+            ),
+        )
+
+    def succeed_habit_operation(
+        self, operation_index: int, operation_ref: str,
+        idempotency_key: str, attempt: int,
+        outputs: Mapping[str, str] | None = None,
+    ) -> FlowSnapshot:
+        extra = {f"output.{key}": value for key, value in (outputs or {}).items()}
+        return self._commit(
+            FlowEventKind.HABIT_OPERATION_SUCCEEDED,
+            self.snapshot.current_node,
+            self._habit_operation_payload(
+                operation_index, operation_ref, idempotency_key, attempt, extra
+            ),
+        )
+
+    def fail_habit_operation(
+        self, operation_index: int, operation_ref: str,
+        idempotency_key: str, attempt: int, error_code: str | None = None,
+    ) -> FlowSnapshot:
+        extra = {"$meta.error_code": error_code or "operation_failed"}
+        return self._commit(
+            FlowEventKind.HABIT_OPERATION_FAILED,
+            self.snapshot.current_node,
+            self._habit_operation_payload(
+                operation_index, operation_ref, idempotency_key, attempt, extra
+            ),
+        )
+
+    def mark_habit_operation_unknown(
+        self, operation_index: int, operation_ref: str,
+        idempotency_key: str, attempt: int, error_code: str | None = None,
+    ) -> FlowSnapshot:
+        extra = {"$meta.error_code": error_code or "operation_outcome_unknown"}
+        return self._commit(
+            FlowEventKind.HABIT_OPERATION_UNKNOWN,
+            self.snapshot.current_node,
+            self._habit_operation_payload(
+                operation_index, operation_ref, idempotency_key, attempt, extra
+            ),
         )
 
     def resolve_branch(self) -> FlowSnapshot:
