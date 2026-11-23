@@ -6,6 +6,18 @@ services:
       - envoy
     networks:
       - agent_net
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
+    user: "65532:65532"
     restart: "no"
     # No direct route to the policy or upstream networks.
 
@@ -23,6 +35,15 @@ services:
       - agent_net
       - policy_net
       - upstream_net
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
     restart: unless-stopped
 
   opa:
@@ -35,6 +56,15 @@ services:
     volumes:
       - ./opa.yaml:/config/opa.yaml:ro
       - ./policy:/policy:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 0.5
     networks:
       - policy_net
     restart: unless-stopped
@@ -42,6 +72,17 @@ services:
   echo:
     build:
       context: ./echo
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.5
     networks:
       - upstream_net
     restart: unless-stopped
