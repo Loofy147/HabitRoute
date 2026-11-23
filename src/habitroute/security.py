@@ -102,7 +102,7 @@ class ActionRequest:
     resource: str
     risk: RiskClass
     estimated_budget_units: float = 0.0
-    approval_receipt: str | None = None
+    approval_receipt: "ApprovalReceipt | None" = None
     recovery_evidence: RecoveryEvidence | None = None
     external_mutation: bool = False
 
