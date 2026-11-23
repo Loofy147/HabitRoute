@@ -63,7 +63,7 @@ The original simulator studies 12-state and 24-state worlds, capacity-limited me
 
 ## Verification status
 
-The latest observed core test matrix is [45199663771](https://github.com/Loofy147/HabitRoute/actions/runs/45199663771), on commit `6133b46fce267981ac03ba515fa5f3f509c17340`, completed successfully across Python 3.11, 3.12 and 3.13. The Envoy + OPA integration workflow [45199663761](https://github.com/Loofy147/HabitRoute/actions/runs/45199663761) is still in progress and is not yet counted as passing. PR #18 remains a draft stacked on PR #12; neither is merged to `main`.
+The latest observed core test matrix is [45200070030](https://github.com/Loofy147/HabitRoute/actions/runs/45200070030), on code commit `0b56d11f5e0b952ceee92a3d166768fd07b3ec30`, completed successfully across Python 3.11, 3.12 and 3.13. The Envoy + OPA integration workflow [45200069399](https://github.com/Loofy147/HabitRoute/actions/runs/45200069399) is still in progress and is not yet counted as passing. PR #18 remains a draft stacked on PR #12; neither is merged to `main`.
 
 ## Install and test
 
