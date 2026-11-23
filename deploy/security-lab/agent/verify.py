@@ -41,5 +41,6 @@ assert request("GET", f"{PROXY}/blocked") == 403
 # The agent is not attached to either network containing these services.
 assert direct_route_is_blocked("http://echo:8080/health")
 assert direct_route_is_blocked("http://opa:8181/health")
+assert direct_route_is_blocked("https://example.com")
 
-print("PASS: allowed requests forwarded; denied requests blocked; direct upstream and policy access unavailable")
+print("PASS: allowlist enforced; denied requests blocked; direct upstream, policy, and internet egress unavailable")
