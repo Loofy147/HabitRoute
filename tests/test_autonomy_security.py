@@ -281,11 +281,12 @@ class TriggerTests(unittest.TestCase):
 
 class HarnessBoundaryTests(unittest.TestCase):
     def make_adapter(self, temp, *, external=True, proxy=None, result=None,
-                     destructive=False, recovery=False, profile_approval=False):
+                     destructive=False, recovery=False, profile_approval=False,
+                     method_override=None, effect_override=None):
         op_ref = "repo.read" if not destructive else "repo.delete"
         host = "api.example.test" if external else "local"
         resource = "https://api.example.test/v1/project" if external else "/project/database"
-        method = "GET" if not destructive else "POST"
+        method = method_override or ("GET" if not destructive else "POST")
         profile = HarnessProfile(
             "inner", "1", "test", "runtime", frozenset({op_ref}),
             frozenset(), 3, False,
@@ -321,9 +322,9 @@ class HarnessBoundaryTests(unittest.TestCase):
         )
         step = OperationStep(
             op_ref,
-            OperationEffect.NON_REPEATABLE if destructive else (
+            effect_override or (OperationEffect.NON_REPEATABLE if destructive else (
                 OperationEffect.READ_ONLY if external else OperationEffect.IDEMPOTENT
-            ),
+            )),
             idempotency_key_supported=external,
         )
         return adapter, inner, step, journal
@@ -381,13 +382,17 @@ class HarnessBoundaryTests(unittest.TestCase):
             self.assertEqual(proxy.calls, [])
             self.assertEqual(inner.calls, [])
 
-    def test_external_post_requires_destructive_recovery_classification(self):
-        with self.assertRaisesRegex(ValueError, "non-read-only HTTP methods"):
-            OperationDescriptor(
-                "repo.action", "api.example.test",
-                "https://api.example.test/v1/project/action",
-                external=True, method="POST", destructive=False,
+    def test_reversible_external_post_does_not_require_destructive_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp:
+            proxy = StubEgress()
+            adapter, inner, step, _ = self.make_adapter(
+                temp, proxy=proxy, method_override="POST",
+                effect_override=OperationEffect.IDEMPOTENT,
             )
+            result = adapter.invoke(step, {"title": "new issue"}, idempotency_key="create-issue")
+            self.assertEqual(result.outcome, OperationOutcome.SUCCEEDED)
+            self.assertEqual(len(proxy.calls), 1)
+            self.assertEqual(inner.calls, [])
 
     def test_secret_inputs_are_rejected_before_dispatch(self):
         with tempfile.TemporaryDirectory() as temp:
