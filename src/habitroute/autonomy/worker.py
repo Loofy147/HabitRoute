@@ -82,7 +82,14 @@ class ApprovalEvidence:
     approver: str
     approval_id: str
     expires_at: int
+    request_sha256: str
     signature: str
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[0-9a-f]{64}", self.request_sha256):
+            raise ValueError("approval request_sha256 must be a SHA-256 digest")
+        if not self.approval_id.strip() or not self.approver.strip():
+            raise ValueError("approval identity fields must be non-empty")
 
 
 class ApprovalVerifier(Protocol):
@@ -108,6 +115,40 @@ class RecoveryPlan:
     required_sequence: int
     expected_state_sha256: str
     max_age_seconds: int = 3600
+
+
+def approval_request_sha256(
+    descriptor: OperationDescriptor,
+    operation: OperationStep,
+    inputs: Mapping[str, str],
+    idempotency_key: str,
+    recovery_plan: RecoveryPlan | None = None,
+) -> str:
+    """Digest the exact action an approval authorizes; prevents cross-input/key replay."""
+    recovery = None
+    if recovery_plan is not None:
+        evidence = recovery_plan.evidence
+        recovery = {
+            "workflow_id": recovery_plan.workflow_id,
+            "required_sequence": recovery_plan.required_sequence,
+            "expected_state_sha256": recovery_plan.expected_state_sha256,
+            "provider": evidence.provider,
+            "snapshot_id": evidence.snapshot_id,
+            "state_sha256": evidence.state_sha256,
+        }
+    request = {
+        "operation_ref": descriptor.operation_ref,
+        "host": descriptor.host.lower(),
+        "resource": descriptor.resource,
+        "method": descriptor.method,
+        "cost_units": descriptor.cost_units,
+        "destructive": descriptor.destructive,
+        "effect": operation.effect.value,
+        "idempotency_key": idempotency_key,
+        "input_sha256": hashlib.sha256(canonical_json(dict(inputs))).hexdigest(),
+        "recovery": recovery,
+    }
+    return hashlib.sha256(canonical_json(request)).hexdigest()
 
 
 class PolicyEnforcedHarnessAdapter:
@@ -205,6 +246,10 @@ class PolicyEnforcedHarnessAdapter:
                 self._deny(operation.operation_ref, idempotency_key, "recovery_gate:" + type(exc).__name__)
 
         now = int(time.time())
+        recovery_plan = self._recovery.get(operation.operation_ref)
+        approval_request = approval_request_sha256(
+            descriptor, operation, inputs, idempotency_key, recovery_plan,
+        )
         approval = self._approvals.get(operation.operation_ref)
         approval_ok = False
         if approval and self._approval_verifier:
@@ -215,6 +260,7 @@ class PolicyEnforcedHarnessAdapter:
                     and approval.host.lower() == descriptor.host.lower()
                     and approval.resource == descriptor.resource
                     and approval.expires_at > now
+                    and approval.request_sha256 == approval_request
                     and bool(self._approval_verifier.verify(approval, claims, descriptor, now))
                 )
             except Exception:
