@@ -66,7 +66,7 @@ A production anchor should prevent tree-head rollback/equivocation and provide i
 
 ## 6. Egress and credential boundary
 
-`PolicyEnforcedHarnessAdapter` wraps the existing `HarnessAdapter`. For `external=True`, it never calls the inner adapter; it requires `EgressProxy.invoke`. Absolute network URLs cannot be labelled local to bypass this boundary. External descriptors require absolute HTTPS URLs with exact host/port matching and reject userinfo, query strings and fragments. A read-only operation requires GET/HEAD; non-read-only operations cannot use GET/HEAD. The operation catalogue explicitly classifies destructive effects: only operations marked `destructive=True` require provider-verified CoW/PITR evidence. POST/PUT/PATCH are not automatically destructive; reversible creates and updates can proceed with scoped authorization, idempotency and any operation-specific approval. Bulk deletes, irreversible changes and other destructive operations remain snapshot-gated.
+`PolicyEnforcedHarnessAdapter` wraps the existing `HarnessAdapter`. For `external=True`, it never calls the inner adapter; it requires `EgressProxy.invoke`. Absolute network URLs cannot be labelled local to bypass this boundary. External descriptors require absolute HTTPS URLs with exact host/port matching and reject userinfo, query strings and fragments. A read-only operation requires GET/HEAD; non-read-only operations cannot use GET/HEAD. The operation catalogue explicitly classifies destructive effects: only operations marked `destructive=True` require provider-verified CoW/PITR evidence. POST/PUT/PATCH are not automatically destructive; reversible creates and updates can proceed with scoped authorization, idempotency and any operation-specific approval. Bulk deletes, irreversible changes and other destructive operations remain snapshot-gated. Approval evidence is bound to a SHA-256 digest of the exact operation, host, resource, method, effect, cost, input digest, idempotency key and recovery identity. The independent verifier must sign/verify that digest; an approval cannot be transferred to altered inputs or a different idempotency key.
 
 The production egress proxy must, at minimum:
 
@@ -146,9 +146,9 @@ Use `hydrate_trigger(envelope, pinned_definition, journal, initial_context=...)`
 
 ## 10. Verification and known limits
 
-The security layer includes unit tests for signature tampering, expiry, attenuation, ancestor budgets, revocation, DAG depth/cycles, URL/path boundaries, UUIDv5 stability, atomic journaling, idempotency conflicts, retry/reconciliation, Merkle proofs over odd/even tree sizes, audit-anchor tampering, duplicate triggers, untrusted wake-up context, egress routing, approval, secret rejection, recovery snapshots and promotion gates.
+The security layer includes unit tests for signature tampering, expiry, attenuation, ancestor budgets, revocation, DAG depth/cycles, URL/path boundaries, UUIDv5 stability, atomic journaling, idempotency conflicts, retry/reconciliation, Merkle proofs over odd/even tree sizes, audit-anchor tampering, duplicate triggers, untrusted wake-up context, egress routing, exact-action approval binding and replay rejection, secret rejection, recovery snapshots and promotion gates.
 
-The local suite is a focused module suite. The repository's Python 3.11–3.13 CI must run against the real HabitRoute core before merge. The currently pending draft PR #12 separately contains per-operation checkpoints and flow-level recovery for multi-operation habits; this security layer does not silently duplicate or merge that branch.
+The local suite is a focused module suite. The repository's Python 3.11–3.13 CI must run against the real HabitRoute core before merge. PR #18 is stacked on draft PR #12, which supplies per-operation checkpoints and flow-level recovery for multi-operation habits. Merge and verify #12 first; then review #18 against that exact base. The security layer does not duplicate the checkpoint implementation.
 
 Production adapters still required:
 
