@@ -27,6 +27,7 @@ The worker is not a distributed workflow service. The security implementation br
 - `src/habitroute/autonomy/` — scoped short-lived capability tokens, attenuated delegation with aggregate ancestor budgets, deterministic idempotency, a SQLite-backed FlowJournal with Merkle audit, immutable trigger hydration, an egress-enforcing HarnessAdapter, provider-verified recovery gates, and shadow-replay/Control Plane promotion checks.
 - [Autonomous Runtime Security Constitution](docs/AUTONOMOUS_RUNTIME_SECURITY.md) — implementation contracts, integration example and explicit trust boundaries.
 - [Production Security Adapters](docs/PRODUCTION_SECURITY_ADAPTERS.md) — recommended production identity, credential, policy, egress, persistence, audit and recovery integrations with release gates.
+- [Isolated Egress Lab](deploy/security-lab/compose.yaml) — executable Envoy + OPA boundary test with an agent container isolated from policy and upstream networks.
 
 This is a reference enforcement layer, not a claim that production infrastructure is already deployed. External operations fail closed without an egress proxy; explicitly destructive operations require provider-verified recovery evidence; action-bound approvals include the exact input and idempotency digest; high-risk external operations can require an independently anchored audit head. The local HMAC broker is for tests/prototypes, not production key management. The SQLite journal is a local trust-boundary store, not a distributed workflow service.
 
@@ -77,3 +78,15 @@ Python 3.11+; core modules use the standard library only. The legacy simulator t
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+
+### Run the isolated egress lab
+
+Requires Docker Engine and Docker Compose v2:
+
+```sh
+docker compose -f deploy/security-lab/compose.yaml up --build --abort-on-container-exit --exit-code-from agent
+docker compose -f deploy/security-lab/compose.yaml down --volumes --remove-orphans
+```
+
+The lab verifies an allowlist decision, denied methods/paths, and the agent's inability to contact the mock upstream, policy service, or public internet directly. It demonstrates the network Policy Enforcement Point boundary only; it does not claim production workload identity, provider credentials, or capability-token validation.
