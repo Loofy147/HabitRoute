@@ -78,6 +78,17 @@ Keep full sensitive event payloads in a private access-controlled store. Send on
 
 The current local adapter binds approval to an exact action digest. Production approval must additionally be signed by an independent approval authority and consumed atomically with the idempotency claim in the transactional ledger. A generic approval for an operation class is insufficient for high-impact actions.
 
+## Executable egress proof
+
+`deploy/security-lab/compose.yaml` provides a local integration lab with an agent attached only to an internal agent network, Envoy attached to the agent/policy/upstream networks, OPA reachable only from Envoy on the policy network, and a mock upstream reachable only from Envoy on the upstream network. Envoy uses the OPA external-authorization gRPC filter with `failure_mode_allow: false`. The agent test proves the two allowlisted operations work, denied methods/paths return 403, and direct access to the upstream, OPA and public internet fails. Containers are read-only, drop Linux capabilities, use `no-new-privileges`, and have resource/PID limits. This lab proves the network PEP topology; it does not yet prove workload mTLS, production capability-token verification, or credential exchange.
+
+Run it with:
+
+```sh
+docker compose -f deploy/security-lab/compose.yaml up --build --abort-on-container-exit --exit-code-from agent
+docker compose -f deploy/security-lab/compose.yaml down --volumes --remove-orphans
+```
+
 ## Delivery sequence
 
 1. **Reference enforcement (current PR):** local capability/policy adapter, action-bound approval, transactional local ledger, audit proofs, recovery and promotion interfaces.
