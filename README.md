@@ -20,14 +20,15 @@ A flow owns progress. A habit owns reuse/optimization. A harness owns the execut
 - `src/habitroute/contracts.py` and `execution.py` — earlier RL-style route/option prototype retained for historical comparison; not canonical.
 - `experiments/step_savings_v1/` — preserved synthetic transition-route and step-savings experiment.
 
-The worker exists, but it is not a distributed workflow service and its multi-operation habit path does not yet commit an individual flow checkpoint for each completed operation. See [core status](docs/CORE_STATUS.md) and the [repository assessment](docs/HABITROUTE_ASSESSMENT.md).
+The worker is not a distributed workflow service. The security implementation branch is stacked on draft PR #12 (`feat/per-operation-checkpoints-v0.1`), which adds per-operation flow checkpoints for multi-operation habits. Both PRs remain unmerged to `main`; the current `main` branch should not be described as having those changes yet. See [core status](docs/CORE_STATUS.md) and the [repository assessment](docs/HABITROUTE_ASSESSMENT.md).
 
 ## Autonomous runtime security
 
 - `src/habitroute/autonomy/` — scoped short-lived capability tokens, attenuated delegation with aggregate ancestor budgets, deterministic idempotency, a SQLite-backed FlowJournal with Merkle audit, immutable trigger hydration, an egress-enforcing HarnessAdapter, provider-verified recovery gates, and shadow-replay/Control Plane promotion checks.
-- [Autonomous Runtime Security Constitution](docs/AUTONOMOUS_RUNTIME_SECURITY.md) — implementation contracts, integration example, production adapter requirements and explicit trust boundaries.
+- [Autonomous Runtime Security Constitution](docs/AUTONOMOUS_RUNTIME_SECURITY.md) — implementation contracts, integration example and explicit trust boundaries.
+- [Production Security Adapters](docs/PRODUCTION_SECURITY_ADAPTERS.md) — recommended production identity, credential, policy, egress, persistence, audit and recovery integrations with release gates.
 
-This is a reference enforcement layer, not a claim that production infrastructure is already deployed. External operations fail closed without an egress proxy; destructive operations require provider-verified recovery evidence; high-risk external operations can require an independently anchored audit head. The local HMAC broker is for tests/prototypes, not production key management. The SQLite journal is a local trust-boundary store, not a distributed workflow service.
+This is a reference enforcement layer, not a claim that production infrastructure is already deployed. External operations fail closed without an egress proxy; explicitly destructive operations require provider-verified recovery evidence; action-bound approvals include the exact input and idempotency digest; high-risk external operations can require an independently anchored audit head. The local HMAC broker is for tests/prototypes, not production key management. The SQLite journal is a local trust-boundary store, not a distributed workflow service.
 
 ## Research and design
 
@@ -61,7 +62,7 @@ The original simulator studies 12-state and 24-state worlds, capacity-limited me
 
 ## Verification status
 
-The latest observed GitHub Actions run is [41841168040](https://github.com/Loofy147/HabitRoute/actions/runs/41841168040), on commit `43d714c8760a15026e0acb966919f483d893e7d0`, completed successfully across Python 3.11, 3.12 and 3.13. The exact test count for that run was not captured. The often-quoted 77/77 result belongs to an earlier commit and is not presented as the latest count.
+The latest observed security-branch code validation is [45199039712](https://github.com/Loofy147/HabitRoute/actions/runs/45199039712), on code commit `742a50e4c25251f6a440a2a34ef801b5c880cae0`, completed successfully across Python 3.11, 3.12 and 3.13. The following commit `24d147d` adds production adapter documentation only. PR #18 remains a draft stacked on PR #12; neither is merged to `main`.
 
 ## Install and test
 
