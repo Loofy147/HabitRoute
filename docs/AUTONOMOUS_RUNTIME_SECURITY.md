@@ -66,7 +66,7 @@ A production anchor should prevent tree-head rollback/equivocation and provide i
 
 ## 6. Egress and credential boundary
 
-`PolicyEnforcedHarnessAdapter` wraps the existing `HarnessAdapter`. For `external=True`, it never calls the inner adapter; it requires `EgressProxy.invoke`. Absolute network URLs cannot be labelled local to bypass this boundary. External descriptors require absolute HTTPS URLs with exact host/port matching and reject userinfo, query strings and fragments. A read-only operation requires GET/HEAD; mutating HTTP verbs PUT/PATCH/DELETE must be marked destructive and pass the recovery gate.
+`PolicyEnforcedHarnessAdapter` wraps the existing `HarnessAdapter`. For `external=True`, it never calls the inner adapter; it requires `EgressProxy.invoke`. Absolute network URLs cannot be labelled local to bypass this boundary. External descriptors require absolute HTTPS URLs with exact host/port matching and reject userinfo, query strings and fragments. A read-only operation requires GET/HEAD; non-read-only operations cannot use GET/HEAD. The operation catalogue explicitly classifies destructive effects: only operations marked `destructive=True` require provider-verified CoW/PITR evidence. POST/PUT/PATCH are not automatically destructive; reversible creates and updates can proceed with scoped authorization, idempotency and any operation-specific approval. Bulk deletes, irreversible changes and other destructive operations remain snapshot-gated.
 
 The production egress proxy must, at minimum:
 
