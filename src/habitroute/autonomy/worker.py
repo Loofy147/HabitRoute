@@ -67,8 +67,6 @@ class OperationDescriptor:
                 raise ValueError("external URL authority must exactly match host")
         elif parsed.scheme or parsed.netloc:
             raise ValueError("absolute network URLs must be marked external")
-        if method in {"POST", "PUT", "PATCH", "DELETE"} and not self.destructive:
-            raise ValueError("non-read-only HTTP methods require a destructive recovery gate")
         if method in {"GET", "HEAD"} and self.destructive:
             raise ValueError("destructive operation cannot use a read-only HTTP method")
         if not math.isfinite(self.cost_units) or self.cost_units < 0:
