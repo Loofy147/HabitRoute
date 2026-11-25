@@ -89,6 +89,207 @@ class FormTokenExchangeTransport(Protocol):
     def post_form(self, endpoint: str, form: Mapping[str, str]) -> Mapping[str, object]: ...
 
 
+def _spiffe_workload_api_message_types():
+    """Build the stable SPIFFE JWT-SVID protobuf messages without protoc.
+
+    The field numbers and RPC paths are taken from the canonical
+    standards/workloadapi.proto. The optional spiffe extra supplies grpcio
+    and protobuf; this avoids checking generated code into the core package.
+    """
+    try:
+        from google.protobuf import descriptor_pb2, descriptor_pool, message_factory, struct_pb2
+    except ImportError as exc:
+        raise RuntimeError(
+            "SPIFFE Workload API support requires the 'spiffe' optional dependencies"
+        ) from exc
+
+    pool = descriptor_pool.DescriptorPool()
+    pool.AddSerializedFile(struct_pb2.DESCRIPTOR.serialized_pb)
+    file_proto = descriptor_pb2.FileDescriptorProto()
+    file_proto.name = "habitroute_spiffe_workloadapi.proto"
+    file_proto.syntax = "proto3"
+    file_proto.dependency.append("google/protobuf/struct.proto")
+
+    F = descriptor_pb2.FieldDescriptorProto
+
+    def add_message(name: str, fields: tuple[tuple[str, int, int, int, str | None], ...]):
+        message = file_proto.message_type.add()
+        message.name = name
+        for field_name, number, field_type, label, type_name in fields:
+            field = message.field.add()
+            field.name = field_name
+            field.number = number
+            field.type = field_type
+            field.label = label
+            if type_name:
+                field.type_name = type_name
+
+    add_message("JWTSVIDRequest", (
+        ("audience", 1, F.TYPE_STRING, F.LABEL_REPEATED, None),
+        ("spiffe_id", 2, F.TYPE_STRING, F.LABEL_OPTIONAL, None),
+    ))
+    add_message("JWTSVID", (
+        ("spiffe_id", 1, F.TYPE_STRING, F.LABEL_OPTIONAL, None),
+        ("svid", 2, F.TYPE_STRING, F.LABEL_OPTIONAL, None),
+        ("hint", 3, F.TYPE_STRING, F.LABEL_OPTIONAL, None),
+    ))
+    add_message("JWTSVIDResponse", (
+        ("svids", 1, F.TYPE_MESSAGE, F.LABEL_REPEATED, ".JWTSVID"),
+    ))
+    add_message("ValidateJWTSVIDRequest", (
+        ("audience", 1, F.TYPE_STRING, F.LABEL_OPTIONAL, None),
+        ("svid", 2, F.TYPE_STRING, F.LABEL_OPTIONAL, None),
+    ))
+    add_message("ValidateJWTSVIDResponse", (
+        ("spiffe_id", 1, F.TYPE_STRING, F.LABEL_OPTIONAL, None),
+        ("claims", 2, F.TYPE_MESSAGE, F.LABEL_OPTIONAL, ".google.protobuf.Struct"),
+    ))
+    pool.AddSerializedFile(file_proto.SerializeToString())
+
+    return {
+        name: message_factory.GetMessageClass(pool.FindMessageTypeByName(name))
+        for name in (
+            "JWTSVIDRequest", "JWTSVID", "JWTSVIDResponse",
+            "ValidateJWTSVIDRequest", "ValidateJWTSVIDResponse",
+        )
+    }
+
+
+class SpiffeWorkloadAPIJWTSource:
+    """Fetch and validate JWT-SVIDs through the local SPIFFE Workload API.
+
+    The Workload API is gRPC and should normally be exposed through a Unix
+    domain socket. Both RPCs include the mandatory workload.spiffe.io=true
+    metadata. The agent's ValidateJWTSVID RPC validates signature, audience
+    and expiry using its trust bundle; this class does not implement JWT
+    signature verification itself.
+
+    A fake channel can be injected for deterministic unit tests. Production
+    callers should leave channel unset and point socket_path at the local
+    SPIFFE Workload Endpoint socket.
+    """
+
+    _METADATA = (("workload.spiffe.io", "true"),)
+    _FETCH_METHOD = "/SpiffeWorkloadAPI/FetchJWTSVID"
+    _VALIDATE_METHOD = "/SpiffeWorkloadAPI/ValidateJWTSVID"
+
+    def __init__(
+        self,
+        *,
+        expected_spiffe_id: str,
+        socket_path: str = "/run/spire/sockets/agent.sock",
+        timeout_seconds: float = 2.0,
+        channel=None,
+    ) -> None:
+        parsed = urlsplit(expected_spiffe_id)
+        if (
+            parsed.scheme != "spiffe" or not parsed.netloc
+            or not parsed.path.strip("/") or parsed.query or parsed.fragment
+            or parsed.username or parsed.password
+        ):
+            raise ValueError("expected workload identity must be a non-root SPIFFE ID")
+        if timeout_seconds <= 0:
+            raise ValueError("Workload API timeout must be positive")
+        self._expected_spiffe_id = expected_spiffe_id
+        self._timeout = timeout_seconds
+        self._owns_channel = channel is None
+        self._classes = _spiffe_workload_api_message_types()
+        if channel is None:
+            try:
+                import grpc
+            except ImportError as exc:
+                raise RuntimeError(
+                    "SPIFFE Workload API support requires the 'spiffe' optional dependencies"
+                ) from exc
+            if not socket_path or not socket_path.startswith("/") or "\x00" in socket_path:
+                raise ValueError("SPIFFE Workload API socket_path must be absolute")
+            target = "unix://" + socket_path
+            channel = grpc.insecure_channel(target)
+        self._channel = channel
+        self._fetch = self._channel.unary_unary(
+            self._FETCH_METHOD,
+            request_serializer=lambda request: request.SerializeToString(),
+            response_deserializer=self._classes["JWTSVIDResponse"].FromString,
+        )
+        self._validate = self._channel.unary_unary(
+            self._VALIDATE_METHOD,
+            request_serializer=lambda request: request.SerializeToString(),
+            response_deserializer=self._classes["ValidateJWTSVIDResponse"].FromString,
+        )
+
+    def fetch_jwt_svid(self, audience: str) -> WorkloadJWT:
+        if not audience or not audience.strip():
+            raise ValueError("SPIFFE JWT-SVID audience must be non-empty")
+        request_type = self._classes["JWTSVIDRequest"]
+        request = request_type(
+            audience=[audience],
+            spiffe_id=self._expected_spiffe_id,
+        )
+        try:
+            response = self._fetch(
+                request, timeout=self._timeout, metadata=self._METADATA,
+            )
+            matches = [
+                item for item in response.svids
+                if item.spiffe_id == self._expected_spiffe_id and item.svid
+            ]
+            if len(matches) != 1:
+                raise CredentialExchangeError(
+                    "SPIFFE Workload API did not return exactly one configured workload identity"
+                )
+
+            jwt = matches[0].svid
+            validate_type = self._classes["ValidateJWTSVIDRequest"]
+            validate_request = validate_type(audience=audience, svid=jwt)
+            validated = self._validate(
+                validate_request, timeout=self._timeout, metadata=self._METADATA,
+            )
+            if validated.spiffe_id != self._expected_spiffe_id:
+                raise CredentialExchangeError(
+                    "SPIFFE agent validated an unexpected workload identity"
+                )
+            claims = validated.claims
+            subject = claims.get("sub")
+            token_audience = claims.get("aud")
+            expires = claims.get("exp")
+            aud_set = (
+                {token_audience} if isinstance(token_audience, str)
+                else set(token_audience) if isinstance(token_audience, (list, tuple))
+                else set()
+            )
+            if subject != self._expected_spiffe_id:
+                raise CredentialExchangeError("validated JWT-SVID subject does not match its SPIFFE identity")
+            if audience not in aud_set:
+                raise CredentialExchangeError("validated JWT-SVID does not contain the requested audience")
+            if isinstance(expires, bool) or not isinstance(expires, (int, float)):
+                raise CredentialExchangeError("validated JWT-SVID has no valid expiry claim")
+            expires_at = int(expires)
+            if expires_at <= int(time.time()):
+                raise CredentialExchangeError("SPIFFE agent returned an expired JWT-SVID")
+            return WorkloadJWT(jwt, validated.spiffe_id, expires_at)
+        except CredentialExchangeError:
+            raise
+        except Exception as exc:
+            code = getattr(exc, "code", None)
+            code_value = code() if callable(code) else None
+            safe_code = str(code_value) if code_value is not None else type(exc).__name__
+            raise CredentialExchangeError(
+                "SPIFFE Workload API request failed (" + safe_code + ")"
+            ) from None
+
+    def close(self) -> None:
+        if self._owns_channel:
+            close = getattr(self._channel, "close", None)
+            if callable(close):
+                close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+
+
 class CredentialedRequestTransport(Protocol):
     """Provider HTTP transport; must not log or persist authorization_header."""
     def send(
