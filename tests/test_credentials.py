@@ -264,7 +264,10 @@ class BrokeredEgressProxyTests(unittest.TestCase):
             "repo.read", "api.example.test",
             "https://api.example.test/v1/project",
             "operator", "approval-1", int(time.time()) + 120,
-            "a" * 64, "independent-approval-signature",
+            approval_request_sha256(
+                protected, self.operation, {"path": "different"}, "approved-action-key",
+            ),
+            "independent-approval-signature",
         )
         proxy = BrokeredEgressProxy(
             capability_broker=self.capabilities,
@@ -284,6 +287,40 @@ class BrokeredEgressProxyTests(unittest.TestCase):
             )
         self.assertEqual(self.form.calls, [])
         self.assertEqual(self.upstream.calls, [])
+
+    def test_valid_single_action_approval_is_accepted_by_proxy(self):
+        protected = OperationDescriptor(
+            "repo.read", "api.example.test",
+            "https://api.example.test/v1/project",
+            external=True, method="GET", approval_required=True,
+        )
+        action_inputs = {"path": "src"}
+        action_key = "valid-approved-action"
+        evidence = ApprovalEvidence(
+            self.capabilities.verify(self.token).capability_id,
+            "repo.read", "api.example.test",
+            "https://api.example.test/v1/project",
+            "operator", "approval-2", int(time.time()) + 120,
+            approval_request_sha256(protected, self.operation, action_inputs, action_key),
+            "independent-approval-signature",
+        )
+        proxy = BrokeredEgressProxy(
+            capability_broker=self.capabilities,
+            token_exchange=self.exchange,
+            transport=self.upstream,
+            journal=self.journal,
+            audience_by_host={"api.example.test": "urn:example:api"},
+            scopes_by_operation={"repo.read": frozenset({"repo.read"})},
+            approval_verifier=GoodApprovalVerifier(),
+        )
+        result = proxy.invoke(
+            protected, self.operation, action_inputs,
+            idempotency_key=action_key,
+            capability_token=self.token,
+            approval_evidence=evidence,
+        )
+        self.assertEqual(result.outcome, OperationOutcome.SUCCEEDED)
+        self.assertEqual(len(self.upstream.calls), 1)
 
     def test_proxy_invocation_ledger_prevents_duplicate_provider_dispatch(self):
         proxy = self.make_proxy()
