@@ -10,7 +10,9 @@ from habitroute.autonomy.credentials import (
     CredentialExchangeError,
     EphemeralAccessToken,
     OAuthTokenExchangeClient,
+    SpiffeWorkloadAPIJWTSource,
     WorkloadJWT,
+    _spiffe_workload_api_message_types,
 )
 from habitroute.autonomy.worker import (
     ApprovalEvidence, OperationDescriptor, approval_request_sha256,
@@ -71,6 +73,105 @@ class FakeUpstreamTransport:
             "authorization_header": authorization_header,
         })
         return self.result
+
+
+class FakeSpiffeWorkloadChannel:
+    def __init__(self, *, expected_spiffe_id, audience, expires_at=None):
+        self.types = _spiffe_workload_api_message_types()
+        self.expected_spiffe_id = expected_spiffe_id
+        self.audience = audience
+        self.expires_at = expires_at or int(time.time()) + 90
+        self.calls = []
+        self.fetch_response = self.types["JWTSVIDResponse"]()
+        item = self.fetch_response.svids.add()
+        item.spiffe_id = expected_spiffe_id
+        item.svid = "header.payload.signature"
+        self.validate_response = self.types["ValidateJWTSVIDResponse"]()
+        self.validate_response.spiffe_id = expected_spiffe_id
+        self.validate_response.claims.update({
+            "sub": expected_spiffe_id,
+            "aud": [audience],
+            "exp": self.expires_at,
+        })
+
+    def unary_unary(self, method, *, request_serializer, response_deserializer):
+        request_type = (
+            self.types["JWTSVIDRequest"]
+            if method.endswith("FetchJWTSVID")
+            else self.types["ValidateJWTSVIDRequest"]
+        )
+        response = (
+            self.fetch_response
+            if method.endswith("FetchJWTSVID")
+            else self.validate_response
+        )
+
+        def invoke(request, *, timeout, metadata):
+            encoded = request_serializer(request)
+            decoded = request_type.FromString(encoded)
+            self.calls.append({
+                "method": method,
+                "request": decoded,
+                "timeout": timeout,
+                "metadata": tuple(metadata),
+            })
+            return response_deserializer(response.SerializeToString())
+
+        return invoke
+
+
+class SpiffeWorkloadAPITests(unittest.TestCase):
+    SPIFFE_ID = "spiffe://example.org/ns/habitroute/sa/egress"
+    AUDIENCE = "spiffe://example.org/credential-broker"
+
+    def test_fetch_uses_workload_api_and_validates_jwt_svid(self):
+        channel = FakeSpiffeWorkloadChannel(
+            expected_spiffe_id=self.SPIFFE_ID,
+            audience=self.AUDIENCE,
+        )
+        source = SpiffeWorkloadAPIJWTSource(
+            expected_spiffe_id=self.SPIFFE_ID,
+            channel=channel,
+            timeout_seconds=1.0,
+        )
+        svid = source.fetch_jwt_svid(self.AUDIENCE)
+        self.assertEqual(svid.spiffe_id, self.SPIFFE_ID)
+        self.assertEqual(svid.value, "header.payload.signature")
+        self.assertGreater(svid.expires_at, int(time.time()))
+        self.assertEqual(len(channel.calls), 2)
+
+        fetch, validate = channel.calls
+        self.assertTrue(fetch["method"].endswith("/FetchJWTSVID"))
+        self.assertEqual(list(fetch["request"].audience), [self.AUDIENCE])
+        self.assertEqual(fetch["request"].spiffe_id, self.SPIFFE_ID)
+        self.assertEqual(fetch["metadata"], (("workload.spiffe.io", "true"),))
+        self.assertTrue(validate["method"].endswith("/ValidateJWTSVID"))
+        self.assertEqual(validate["request"].audience, self.AUDIENCE)
+        self.assertEqual(validate["request"].svid, "header.payload.signature")
+        self.assertEqual(validate["metadata"], (("workload.spiffe.io", "true"),))
+
+    def test_workload_api_rejects_wrong_validated_audience(self):
+        channel = FakeSpiffeWorkloadChannel(
+            expected_spiffe_id=self.SPIFFE_ID,
+            audience="spiffe://example.org/other-service",
+        )
+        source = SpiffeWorkloadAPIJWTSource(
+            expected_spiffe_id=self.SPIFFE_ID, channel=channel,
+        )
+        with self.assertRaisesRegex(CredentialExchangeError, "requested audience"):
+            source.fetch_jwt_svid(self.AUDIENCE)
+
+    def test_workload_api_rejects_expired_validated_identity(self):
+        channel = FakeSpiffeWorkloadChannel(
+            expected_spiffe_id=self.SPIFFE_ID,
+            audience=self.AUDIENCE,
+            expires_at=int(time.time()) - 1,
+        )
+        source = SpiffeWorkloadAPIJWTSource(
+            expected_spiffe_id=self.SPIFFE_ID, channel=channel,
+        )
+        with self.assertRaisesRegex(CredentialExchangeError, "expired JWT-SVID"):
+            source.fetch_jwt_svid(self.AUDIENCE)
 
 
 class TokenExchangeTests(unittest.TestCase):
