@@ -298,7 +298,10 @@ class FlowWorker:
             return FlowDispatchResult(DispatchStatus.PAUSED, node.node_id, result.reason)
 
         if result.status is MachineExecutionStatus.FAILED:
-            if all(operation.effect in self._SAFE_RETRY_EFFECTS for operation in habit.operations):
+            if (
+                result.reason == "operation_not_executed"
+                or all(operation.effect in self._SAFE_RETRY_EFFECTS for operation in habit.operations)
+            ):
                 flow.fail_step(result.reason, metadata)
                 return self._result_after_transition(flow, node.node_id, "habit_failed_retryable")
             flow.needs_attention(result.reason, evidence=outputs, metadata=metadata)
