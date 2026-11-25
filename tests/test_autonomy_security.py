@@ -48,7 +48,10 @@ class StubEgress:
         self.fail = fail
         self.calls = []
 
-    def invoke(self, descriptor, operation, inputs, *, idempotency_key, capability_token):
+    def invoke(
+        self, descriptor, operation, inputs, *, idempotency_key, capability_token,
+        approval_evidence=None, recovery_plan=None,
+    ):
         self.calls.append((descriptor.operation_ref, idempotency_key))
         if self.fail:
             raise TimeoutError("transport lost after request dispatch")
@@ -331,7 +334,8 @@ class HarnessBoundaryTests(unittest.TestCase):
                 claims.capability_id, op_ref, host, resource, "test-approver",
                 "approval-1", int(time.time()) + 300,
                 approval_request_sha256(
-                    descriptor, step, approval_inputs, approval_key,
+                    descriptor, step, approval_inputs,
+                    deterministic_idempotency_key(approval_key, op_ref),
                     recovery_plans.get(op_ref),
                 ),
                 "valid-approval-signature",
