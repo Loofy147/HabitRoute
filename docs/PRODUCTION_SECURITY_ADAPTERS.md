@@ -89,6 +89,21 @@ docker compose -f deploy/security-lab/compose.yaml up --build --abort-on-contain
 docker compose -f deploy/security-lab/compose.yaml down --volumes --remove-orphans
 ```
 
+## Credential exchange implementation added to the reference branch
+
+The branch now includes `src/habitroute/autonomy/credentials.py`:
+
+- `OAuthTokenExchangeClient` obtains a broker-audience JWT-SVID from a `WorkloadJWTSource`, then performs RFC 8693 token exchange with explicit `resource`, `audience` and per-operation `scope`.
+- It rejects scope expansion, unexpected token types, refresh tokens, malformed responses, expired identities and upstream tokens longer than the configured maximum (300 seconds by default).
+- `MutualTLSFormTransport` sends token-exchange requests over HTTPS with a client certificate and private key. It reloads the certificate/key files for each request so an atomic SVID-file rotation is observed; redirects are refused and response bodies are size-limited.
+- `BrokeredEgressProxy` re-verifies the capability at the proxy boundary, validates configured host/audience and operation/scope mappings, re-verifies action-bound approval evidence, re-verifies destructive recovery evidence, applies a separate invocation/idempotency budget journal, and passes the short-lived access token only to the provider transport.
+- `UrllibJsonEgressTransport` refuses redirects, sends the idempotency key, limits response size and treats ambiguous network/5xx outcomes conservatively.
+- The token wrapper has redacted string/repr behavior; exact credential reflection in provider outputs is converted to an unknown result and never returned to the worker.
+
+**Trust boundary limitation:** `WorkloadJWTSource` is a provider interface, not a bundled SPIRE gRPC client. Production deployment must connect it to the SPIFFE Workload API (preferably using an official SPIFFE SDK) and must mount/serve the proxy's SVID material only inside the proxy trust domain. The broker must validate JWT-SVID signatures using the trust-domain bundle, authenticate the proxy's mTLS client identity, enforce token-exchange policy, and issue access tokens restricted to the requested resource and exact scopes. The code does not create a production credential-broker service or provision provider secrets.
+
+The proxy journal is SQLite and suitable only for one isolated proxy instance. Multi-replica deployments must move invocation claims and budget charging to a shared transactional database before horizontal scaling. Do not put the agent and brokered proxy in the same compromise domain.
+
 ## Delivery sequence
 
 1. **Reference enforcement (current PR):** local capability/policy adapter, action-bound approval, transactional local ledger, audit proofs, recovery and promotion interfaces.
