@@ -158,7 +158,23 @@ class SpiffeWorkloadAPITests(unittest.TestCase):
         source = SpiffeWorkloadAPIJWTSource(
             expected_spiffe_id=self.SPIFFE_ID, channel=channel,
         )
-        with self.assertRaisesRegex(CredentialExchangeError, "requested audience"):
+        with self.assertRaisesRegex(CredentialExchangeError, "not restricted to the requested service"):
+            source.fetch_jwt_svid(self.AUDIENCE)
+
+    def test_workload_api_rejects_multiple_audiences(self):
+        channel = FakeSpiffeWorkloadChannel(
+            expected_spiffe_id=self.SPIFFE_ID,
+            audience=self.AUDIENCE,
+        )
+        channel.validate_response.claims.update({
+            "sub": self.SPIFFE_ID,
+            "aud": [self.AUDIENCE, "spiffe://example.org/another-service"],
+            "exp": int(time.time()) + 90,
+        })
+        source = SpiffeWorkloadAPIJWTSource(
+            expected_spiffe_id=self.SPIFFE_ID, channel=channel,
+        )
+        with self.assertRaisesRegex(CredentialExchangeError, "not restricted"):
             source.fetch_jwt_svid(self.AUDIENCE)
 
     def test_workload_api_rejects_expired_validated_identity(self):
