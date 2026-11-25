@@ -260,10 +260,13 @@ class SpiffeWorkloadAPIJWTSource:
             )
             if subject != self._expected_spiffe_id:
                 raise CredentialExchangeError("validated JWT-SVID subject does not match its SPIFFE identity")
-            if audience not in aud_set:
-                raise CredentialExchangeError("validated JWT-SVID does not contain the requested audience")
-            if isinstance(expires, bool) or not isinstance(expires, (int, float)):
-                raise CredentialExchangeError("validated JWT-SVID has no valid expiry claim")
+            if aud_set != {audience}:
+                raise CredentialExchangeError("validated JWT-SVID audience is not restricted to the requested service")
+            if (
+                isinstance(expires, bool) or not isinstance(expires, (int, float))
+                or not float(expires).is_integer()
+            ):
+                raise CredentialExchangeError("validated JWT-SVID has no valid integer expiry claim")
             expires_at = int(expires)
             if expires_at <= int(time.time()):
                 raise CredentialExchangeError("SPIFFE agent returned an expired JWT-SVID")
