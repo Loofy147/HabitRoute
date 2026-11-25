@@ -26,7 +26,7 @@ from ..machine import (
     OperationStep,
 )
 from .capabilities import (
-    CapabilityBroker,
+    CapabilityVerifier,
     CapabilityToken,
     DecisionKind,
     PolicyRequest,
@@ -233,15 +233,24 @@ class OAuthTokenExchangeClient:
         broker_audience: str,
         workload_identity: WorkloadJWTSource,
         transport: FormTokenExchangeTransport,
+        expected_spiffe_id: str,
         max_token_lifetime_seconds: int = 300,
     ) -> None:
         MutualTLSFormTransport._validate_endpoint(token_endpoint)
         if not broker_audience.strip():
             raise ValueError("broker audience must be non-empty")
+        expected = urlsplit(expected_spiffe_id)
+        if (
+            expected.scheme != "spiffe" or not expected.netloc
+            or not expected.path.strip("/") or expected.query or expected.fragment
+            or expected.username or expected.password
+        ):
+            raise ValueError("expected proxy identity must be a non-root SPIFFE ID")
         if not 1 <= max_token_lifetime_seconds <= 900:
             raise ValueError("maximum upstream token lifetime must be between 1 and 900 seconds")
         self._endpoint = token_endpoint
         self._broker_audience = broker_audience
+        self._expected_spiffe_id = expected_spiffe_id
         self._identity = workload_identity
         self._transport = transport
         self._max_lifetime = max_token_lifetime_seconds
@@ -275,8 +284,8 @@ class OAuthTokenExchangeClient:
         svid = self._identity.fetch_jwt_svid(self._broker_audience)
         if not isinstance(svid, WorkloadJWT) or svid.expires_at <= current:
             raise CredentialExchangeError("SPIFFE Workload API returned an expired or invalid identity")
-        if not svid.spiffe_id.startswith("spiffe://"):
-            raise CredentialExchangeError("SPIFFE workload identity is invalid")
+        if svid.spiffe_id != self._expected_spiffe_id:
+            raise CredentialExchangeError("SPIFFE workload identity does not match the configured proxy principal")
 
         form = {
             "grant_type": _TOKEN_EXCHANGE_GRANT,
@@ -427,10 +436,11 @@ class BrokeredEgressProxy:
     def __init__(
         self,
         *,
-        capability_broker: CapabilityBroker,
+        capability_broker: CapabilityVerifier,
         token_exchange: OAuthTokenExchangeClient,
         transport: CredentialedRequestTransport,
         journal: SQLiteFlowJournal,
+        operation_descriptors: Mapping[str, OperationDescriptor],
         audience_by_host: Mapping[str, str],
         scopes_by_operation: Mapping[str, frozenset[str]],
         approval_required_operations: frozenset[str] = frozenset(),
@@ -441,13 +451,25 @@ class BrokeredEgressProxy:
         self._exchange = token_exchange
         self._transport = transport
         self._journal = journal
+        self._descriptors = dict(operation_descriptors)
         self._audiences = {host.lower(): audience for host, audience in audience_by_host.items()}
         self._scopes = {operation: frozenset(scopes) for operation, scopes in scopes_by_operation.items()}
         self._approval_required = frozenset(approval_required_operations)
         self._approval_verifier = approval_verifier
         self._snapshot_verifier = snapshot_verifier
-        if not self._audiences or any(not value.strip() for value in self._audiences.values()):
-            raise ValueError("proxy must declare explicit audiences for allowed hosts")
+        if (
+            not self._descriptors
+            or any(key != descriptor.operation_ref or not descriptor.external
+                   for key, descriptor in self._descriptors.items())
+        ):
+            raise ValueError("proxy must declare an authoritative external operation catalogue")
+        if set(self._scopes) != set(self._descriptors):
+            raise ValueError("proxy operation scopes must exactly match its operation catalogue")
+        allowed_hosts = {descriptor.host.lower() for descriptor in self._descriptors.values()}
+        if not self._audiences or set(self._audiences) != allowed_hosts or any(
+            not value.strip() for value in self._audiences.values()
+        ):
+            raise ValueError("proxy audiences must exactly match catalogue hosts")
         if not self._scopes or any(not scopes for scopes in self._scopes.values()):
             raise ValueError("proxy must declare non-empty scopes for allowed operations")
         if self._approval_required and self._approval_verifier is None:
@@ -475,6 +497,12 @@ class BrokeredEgressProxy:
         approval_evidence: ApprovalEvidence | None = None,
         recovery_plan: RecoveryPlan | None = None,
     ) -> HarnessOperationResult:
+        trusted_descriptor = self._descriptors.get(operation.operation_ref)
+        if trusted_descriptor is None:
+            self._deny(descriptor, idempotency_key, "operation_not_in_proxy_catalogue")
+        if descriptor != trusted_descriptor:
+            self._deny(trusted_descriptor, idempotency_key, "untrusted_operation_descriptor")
+        descriptor = trusted_descriptor
         if not descriptor.external:
             self._deny(descriptor, idempotency_key, "external_descriptor_required")
         if descriptor.operation_ref != operation.operation_ref:
