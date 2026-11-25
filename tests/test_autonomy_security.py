@@ -43,9 +43,10 @@ class StubHarness:
 
 
 class StubEgress:
-    def __init__(self, result=None, fail=False):
+    def __init__(self, result=None, fail=False, not_executed=False):
         self.result = result or HarnessOperationResult(OperationOutcome.SUCCEEDED)
         self.fail = fail
+        self.not_executed = not_executed
         self.calls = []
 
     def invoke(
@@ -53,6 +54,8 @@ class StubEgress:
         approval_evidence=None, recovery_plan=None,
     ):
         self.calls.append((descriptor.operation_ref, idempotency_key))
+        if self.not_executed:
+            raise OperationNotExecuted("proxy denied before dispatch")
         if self.fail:
             raise TimeoutError("transport lost after request dispatch")
         return self.result
@@ -365,6 +368,18 @@ class HarnessBoundaryTests(unittest.TestCase):
             self.assertEqual(result.outcome, OperationOutcome.SUCCEEDED)
             self.assertEqual(len(proxy.calls), 1)
             self.assertEqual(inner.calls, [])
+
+    def test_known_pre_dispatch_denial_is_failed_not_unknown_and_can_retry(self):
+        with tempfile.TemporaryDirectory() as temp:
+            proxy = StubEgress(not_executed=True)
+            adapter, _, step, _ = self.make_adapter(temp, proxy=proxy)
+            first = adapter.invoke(step, {}, idempotency_key="pre-dispatch-retry")
+            self.assertEqual(first.outcome, OperationOutcome.FAILED)
+            self.assertEqual(first.error_code, "operation_not_executed")
+            proxy.not_executed = False
+            second = adapter.invoke(step, {}, idempotency_key="pre-dispatch-retry")
+            self.assertEqual(second.outcome, OperationOutcome.SUCCEEDED)
+            self.assertEqual(len(proxy.calls), 2)
 
     def test_unknown_dispatch_result_is_not_replayed(self):
         with tempfile.TemporaryDirectory() as temp:
