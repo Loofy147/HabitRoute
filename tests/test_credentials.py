@@ -217,6 +217,10 @@ class TokenExchangeTests(unittest.TestCase):
         self.assertEqual(request["grant_type"], "urn:ietf:params:oauth:grant-type:token-exchange")
         self.assertEqual(request["subject_token_type"], "urn:ietf:params:oauth:token-type:jwt")
         self.assertEqual(request["subject_token"], "header.payload.signature")
+        self.assertEqual(
+            request["requested_token_type"],
+            "urn:ietf:params:oauth:token-type:access_token",
+        )
         self.assertEqual(request["resource"], "https://api.example.test")
         self.assertEqual(request["audience"], "urn:example:api")
         self.assertEqual(request["scope"], "repo.read")
