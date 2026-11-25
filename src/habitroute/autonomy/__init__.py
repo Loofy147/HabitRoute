@@ -20,8 +20,8 @@ from .worker import (
 )
 from .credentials import (
     BrokeredEgressProxy, CredentialExchangeError, EphemeralAccessToken,
-    MutualTLSFormTransport, OAuthTokenExchangeClient, WorkloadJWT,
-    WorkloadJWTSource,
+    MutualTLSFormTransport, OAuthTokenExchangeClient, SpiffeWorkloadAPIJWTSource,
+    WorkloadJWT, WorkloadJWTSource,
 )
 from .runtime import TriggerEnvelope, TriggerHydration, hydrate_trigger
 
@@ -38,6 +38,6 @@ __all__ = [
     "OperationDescriptor", "PolicyEnforcedHarnessAdapter", "RecoveryPlan",
     "approval_request_sha256",
     "BrokeredEgressProxy", "CredentialExchangeError", "EphemeralAccessToken",
-    "MutualTLSFormTransport", "OAuthTokenExchangeClient", "WorkloadJWT",
-    "WorkloadJWTSource", "TriggerEnvelope", "TriggerHydration", "hydrate_trigger",
+    "MutualTLSFormTransport", "OAuthTokenExchangeClient", "SpiffeWorkloadAPIJWTSource",
+    "WorkloadJWT", "WorkloadJWTSource", "TriggerEnvelope", "TriggerHydration", "hydrate_trigger",
 ]
