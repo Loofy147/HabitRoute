@@ -17,11 +17,13 @@ permissions:
 jobs:
   egress-boundary:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Run isolated Envoy + OPA boundary test
-        run: docker compose -f deploy/security-lab/compose.yaml up --build --abort-on-container-exit --exit-code-from agent
+      - name: Start isolated policy and upstream services
+        run: docker compose -f deploy/security-lab/compose.yaml up --build --detach opa echo envoy
+      - name: Run bounded agent egress assertions
+        run: timeout --signal=TERM --kill-after=5s 90s docker compose -f deploy/security-lab/compose.yaml run --rm --no-deps agent
       - name: Collect service logs
         if: always()
         run: docker compose -f deploy/security-lab/compose.yaml logs --no-color
