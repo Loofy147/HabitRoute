@@ -204,8 +204,13 @@ class CapabilityToken:
         return "CapabilityToken(<redacted>)"
 
 
-class CapabilityBroker(Protocol):
+class CapabilityVerifier(Protocol):
+    """Verification-only trust interface suitable for the isolated egress proxy."""
     def verify(self, token: CapabilityToken | str, *, now: int | None = None) -> CapabilityClaims: ...
+
+
+class CapabilityBroker(CapabilityVerifier, Protocol):
+    """Issuance interface; do not give this authority to execution workers."""
     def mint_root(self, **kwargs: object) -> CapabilityToken: ...
     def delegate(self, parent_token: CapabilityToken | str, **kwargs: object) -> CapabilityToken: ...
 
