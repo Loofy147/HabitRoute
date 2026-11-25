@@ -525,17 +525,20 @@ class BrokeredEgressProxy:
                 descriptor, operation, inputs, idempotency_key, recovery_plan,
             )
             verifier = self._approval_verifier
-            approval_ok = bool(
-                approval_evidence is not None
-                and verifier is not None
-                and approval_evidence.capability_id == claims.capability_id
-                and approval_evidence.operation_ref == descriptor.operation_ref
-                and approval_evidence.host.lower() == descriptor.host.lower()
-                and approval_evidence.resource == descriptor.resource
-                and approval_evidence.expires_at > now
-                and approval_evidence.request_sha256 == request_digest
-                and verifier.verify(approval_evidence, claims, descriptor, now)
-            )
+            try:
+                approval_ok = bool(
+                    approval_evidence is not None
+                    and verifier is not None
+                    and approval_evidence.capability_id == claims.capability_id
+                    and approval_evidence.operation_ref == descriptor.operation_ref
+                    and approval_evidence.host.lower() == descriptor.host.lower()
+                    and approval_evidence.resource == descriptor.resource
+                    and approval_evidence.expires_at > now
+                    and approval_evidence.request_sha256 == request_digest
+                    and verifier.verify(approval_evidence, claims, descriptor, now)
+                )
+            except Exception:
+                approval_ok = False
         decision = evaluate_capability(
             claims,
             PolicyRequest(
@@ -610,7 +613,10 @@ class BrokeredEgressProxy:
                 idempotency_key, "unknown", "invalid_upstream_result",
             )
             return HarnessOperationResult(OperationOutcome.UNKNOWN, error_code="invalid_upstream_result")
-        if any(credential._contains_value(value) for _, value in result.outputs):
+        if any(
+            credential._contains_value(key) or credential._contains_value(value)
+            for key, value in result.outputs
+        ):
             self._journal.finish_invocation(
                 idempotency_key, "unknown", "credential_disclosure",
             )
