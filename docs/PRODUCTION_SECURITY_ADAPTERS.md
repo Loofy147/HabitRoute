@@ -40,6 +40,10 @@ The local reference implementation must not be represented as providing these de
 
 ## Important implementation details
 
+### Proxy-owned operation policy
+
+The isolated proxy owns an immutable operation catalogue. Each entry binds the operation reference to its exact destination, host, HTTP method, estimated cost, destructive flag, approval requirement and side-effect class. The proxy rejects descriptors or operation-effect values supplied by the worker if they differ from the catalogue. Audience and scope mappings must exactly cover the catalogue; they cannot add an unregistered operation or host. Capability verification is a separate verification-only interface: the proxy needs verification authority, not token-minting or delegation authority. The reference HMAC implementation still shares a secret for tests; production should use an asymmetric verifier or a remote introspection service so the execution worker cannot mint capabilities.
+
 ### Identity and credential flow
 
 Use SPIFFE/SPIRE to give each runtime component a cryptographic workload identity. The Credential Broker authenticates the calling workload using mTLS and exchanges that identity plus the parent capability for a short-lived credential intended for one provider/resource and a narrow set of scopes.
@@ -100,7 +104,7 @@ The branch now includes `src/habitroute/autonomy/credentials.py`:
 - `UrllibJsonEgressTransport` refuses redirects, sends the idempotency key, limits response size and treats ambiguous network/5xx outcomes conservatively.
 - The token wrapper has redacted string/repr behavior; exact credential reflection in provider outputs is converted to an unknown result and never returned to the worker.
 
-**Trust boundary limitation:** `WorkloadJWTSource` is a provider interface, not a bundled SPIRE gRPC client. Production deployment must connect it to the SPIFFE Workload API (preferably using an official SPIFFE SDK) and must mount/serve the proxy's SVID material only inside the proxy trust domain. The broker must validate JWT-SVID signatures using the trust-domain bundle, authenticate the proxy's mTLS client identity, enforce token-exchange policy, and issue access tokens restricted to the requested resource and exact scopes. The code does not create a production credential-broker service or provision provider secrets.
+**Trust boundary limitation:** `WorkloadJWTSource` is a provider interface, not a bundled SPIRE gRPC client. The client requires an exact configured SPIFFE principal and rejects a mismatched principal locally; the authorization server must still cryptographically validate the JWT-SVID signature, trust bundle, expiry, subject and broker audience. Production deployment must connect it to the SPIFFE Workload API (preferably using an official SPIFFE SDK) and must mount/serve the proxy's SVID material only inside the proxy trust domain. The broker must validate JWT-SVID signatures using the trust-domain bundle, authenticate the proxy's mTLS client identity, enforce token-exchange policy, and issue access tokens restricted to the requested resource and exact scopes. The code does not create a production credential-broker service or provision provider secrets.
 
 The proxy journal is SQLite and suitable only for one isolated proxy instance. Multi-replica deployments must move invocation claims and budget charging to a shared transactional database before horizontal scaling. Do not put the agent and brokered proxy in the same compromise domain.
 
