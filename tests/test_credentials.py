@@ -81,6 +81,7 @@ class TokenExchangeTests(unittest.TestCase):
             token_endpoint="https://broker.example.test/oauth/token",
             broker_audience="spiffe://example.org/credential-broker",
             workload_identity=source,
+            expected_spiffe_id="spiffe://example.org/ns/habitroute/sa/egress",
             transport=form,
             max_token_lifetime_seconds=300,
         )
@@ -160,6 +161,22 @@ class TokenExchangeTests(unittest.TestCase):
             )
         self.assertEqual(form.calls, [])
 
+    def test_wrong_spiffe_principal_fails_before_token_exchange(self):
+        source = FakeWorkloadJWTSource()
+        source.fetch_jwt_svid = lambda audience: WorkloadJWT(
+            "header.payload.signature",
+            "spiffe://example.org/ns/habitroute/sa/unrelated",
+            int(time.time()) + 120,
+        )
+        client, _, form = self.make_client(source=source)
+        with self.assertRaisesRegex(CredentialExchangeError, "does not match"):
+            client.exchange(
+                resource="https://api.example.test",
+                audience="urn:example:api",
+                scopes=frozenset({"repo.read"}),
+            )
+        self.assertEqual(form.calls, [])
+
     def test_invalid_resource_or_empty_scope_is_rejected(self):
         client, _, form = self.make_client()
         with self.assertRaises(ValueError):
@@ -208,18 +225,22 @@ class BrokeredEgressProxyTests(unittest.TestCase):
             token_endpoint="https://broker.example.test/oauth/token",
             broker_audience="spiffe://example.org/credential-broker",
             workload_identity=self.source,
+            expected_spiffe_id="spiffe://example.org/ns/habitroute/sa/egress",
             transport=self.form,
         )
         self.upstream = FakeUpstreamTransport()
 
-    def make_proxy(self, descriptor=None, transport=None, scopes=None):
+    def make_proxy(self, descriptor=None, transport=None, scopes=None, approval_verifier=None):
+        trusted = descriptor or self.descriptor
         return BrokeredEgressProxy(
             capability_broker=self.capabilities,
             token_exchange=self.exchange,
             transport=transport or self.upstream,
             journal=self.journal,
-            audience_by_host={"api.example.test": "urn:example:api"},
-            scopes_by_operation=scopes or {"repo.read": frozenset({"repo.read"})},
+            operation_descriptors={trusted.operation_ref: trusted},
+            audience_by_host={trusted.host: "urn:example:api"},
+            scopes_by_operation=scopes or {trusted.operation_ref: frozenset({"repo.read"})},
+            approval_verifier=approval_verifier,
         )
 
     def test_proxy_rechecks_capability_and_sends_token_only_upstream(self):
@@ -274,6 +295,7 @@ class BrokeredEgressProxyTests(unittest.TestCase):
             token_exchange=self.exchange,
             transport=self.upstream,
             journal=self.journal,
+            operation_descriptors={"repo.read": protected},
             audience_by_host={"api.example.test": "urn:example:api"},
             scopes_by_operation={"repo.read": frozenset({"repo.read"})},
             approval_verifier=GoodApprovalVerifier(),
@@ -339,6 +361,31 @@ class BrokeredEgressProxyTests(unittest.TestCase):
         self.assertEqual(len(self.upstream.calls), 1)
         self.assertEqual(len(self.form.calls), 1)
 
+    def test_worker_cannot_clear_destructive_flag_in_descriptor(self):
+        trusted = OperationDescriptor(
+            "repo.read", "api.example.test",
+            "https://api.example.test/v1/project",
+            external=True, method="POST", destructive=True,
+        )
+        forged = OperationDescriptor(
+            "repo.read", "api.example.test",
+            "https://api.example.test/v1/project",
+            external=True, method="POST", destructive=False,
+        )
+        proxy = self.make_proxy(descriptor=trusted)
+        operation = OperationStep(
+            "repo.read", OperationEffect.NON_REPEATABLE,
+            idempotency_key_supported=True,
+        )
+        with self.assertRaisesRegex(OperationNotExecuted, "untrusted_operation_descriptor"):
+            proxy.invoke(
+                forged, operation, {},
+                idempotency_key="forged-destructive-flag",
+                capability_token=self.token,
+            )
+        self.assertEqual(self.form.calls, [])
+        self.assertEqual(self.upstream.calls, [])
+
     def test_destructive_request_without_provider_snapshot_is_denied(self):
         destructive_descriptor = OperationDescriptor(
             "repo.read", "api.example.test",
@@ -349,7 +396,7 @@ class BrokeredEgressProxyTests(unittest.TestCase):
             "repo.read", OperationEffect.NON_REPEATABLE,
             idempotency_key_supported=True,
         )
-        proxy = self.make_proxy()
+        proxy = self.make_proxy(descriptor=destructive_descriptor)
         with self.assertRaises(OperationNotExecuted):
             proxy.invoke(
                 destructive_descriptor, destructive_step, {},
