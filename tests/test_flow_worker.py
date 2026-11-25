@@ -7,7 +7,7 @@ from habitroute.flows import (
 from habitroute.machine import (
     CostMetric, EfficiencyGate, HarnessOperationResult, HarnessProfile,
     MachineHabit, MachineHabitStatus, OperationEffect, OperationOutcome,
-    OperationStep, PerformanceProfile, StateCondition,
+    OperationNotExecuted, OperationStep, PerformanceProfile, StateCondition,
 )
 from habitroute.worker import DispatchStatus, FlowWorker, HabitRegistry
 
@@ -118,6 +118,25 @@ class FlowWorkerTests(unittest.TestCase):
             self.assertEqual(result.status, DispatchStatus.NEEDS_ATTENTION)
             self.assertEqual(flow.snapshot.status, FlowStatus.NEEDS_ATTENTION)
             self.assertEqual(len(harness.calls), 1)
+
+    def test_known_pre_dispatch_denial_is_failed_not_uncertain(self):
+        harness = StubHarness(profile(), {
+            "repo.scan": [OperationNotExecuted("policy_denied_before_execution")],
+        })
+        node = FlowNode("scan", FlowNodeKind.OPERATION, "repo.scan", "done",
+                        max_attempts=3, effect=OperationEffect.IDEMPOTENT)
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = JsonlFlowJournal(tmp)
+            flow = PersistentFlow.start(
+                simple_flow(node, "unused"), "worker-pre-dispatch-denial", journal,
+            )
+            result = FlowWorker(harness).dispatch(flow)
+            events = journal.load("worker-pre-dispatch-denial")
+            self.assertEqual(len(harness.calls), 1)
+            self.assertEqual(events[-1].kind.value, "step_failed")
+            self.assertFalse(any(event.kind.value == "step_outcome_unknown" for event in events))
+            self.assertNotEqual(result.status, DispatchStatus.NEEDS_ATTENTION)
+            self.assertNotEqual(flow.snapshot.status, FlowStatus.NEEDS_ATTENTION)
 
     def test_adapter_exception_is_treated_as_uncertain_not_retried(self):
         harness = StubHarness(profile(), {"repo.scan": [TimeoutError("connection dropped")]})
