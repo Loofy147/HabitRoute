@@ -18,6 +18,11 @@ from .worker import (
     ApprovalEvidence, OperationDescriptor, PolicyEnforcedHarnessAdapter, RecoveryPlan,
     approval_request_sha256,
 )
+from .credentials import (
+    BrokeredEgressProxy, CredentialExchangeError, EphemeralAccessToken,
+    MutualTLSFormTransport, OAuthTokenExchangeClient, WorkloadJWT,
+    WorkloadJWTSource,
+)
 from .runtime import TriggerEnvelope, TriggerHydration, hydrate_trigger
 
 __all__ = [
@@ -32,5 +37,7 @@ __all__ = [
     "merkle_root", "verify_merkle_inclusion", "ApprovalEvidence",
     "OperationDescriptor", "PolicyEnforcedHarnessAdapter", "RecoveryPlan",
     "approval_request_sha256",
-    "TriggerEnvelope", "TriggerHydration", "hydrate_trigger",
+    "BrokeredEgressProxy", "CredentialExchangeError", "EphemeralAccessToken",
+    "MutualTLSFormTransport", "OAuthTokenExchangeClient", "WorkloadJWT",
+    "WorkloadJWTSource", "TriggerEnvelope", "TriggerHydration", "hydrate_trigger",
 ]
