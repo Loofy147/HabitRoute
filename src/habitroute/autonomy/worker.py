@@ -14,7 +14,7 @@ from ..machine import (
     OperationStep, OperationNotExecuted,
 )
 from .capabilities import (
-    CapabilityBroker, CapabilityClaims, CapabilityToken, DecisionKind,
+    CapabilityVerifier, CapabilityClaims, CapabilityToken, DecisionKind,
     PolicyRequest, canonical_json, deterministic_idempotency_key,
     evaluate_capability,
 )
@@ -159,7 +159,7 @@ class PolicyEnforcedHarnessAdapter:
     """Drop-in adapter. External operations never fall back to the inner adapter."""
 
     def __init__(
-        self, inner: HarnessAdapter, *, broker: CapabilityBroker,
+        self, inner: HarnessAdapter, *, broker: CapabilityVerifier,
         capability_token: CapabilityToken | str,
         descriptors: Mapping[str, OperationDescriptor],
         journal: SQLiteFlowJournal,
