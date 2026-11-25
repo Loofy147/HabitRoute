@@ -23,7 +23,9 @@ services:
 
   envoy:
     image: envoyproxy/envoy:v1.40.2
+    entrypoint: ["/usr/local/bin/envoy"]
     command: ["-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
+    user: "65532:65532"
     ports:
       - "127.0.0.1:10000:10000"
     volumes:
@@ -39,7 +41,6 @@ services:
     tmpfs:
       - /tmp
     cap_drop: ["ALL"]
-    cap_add: ["CHOWN"]
     security_opt:
       - no-new-privileges:true
     pids_limit: 128
