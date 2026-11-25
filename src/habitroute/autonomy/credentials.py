@@ -49,6 +49,7 @@ _TOKEN_EXCHANGE_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange"
 _JWT_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:jwt"
 _ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
 _SCOPE = re.compile(r"^[A-Za-z0-9._:/-]{1,128}$")
+_IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 _COMPACT_JWT_PART = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
@@ -496,6 +497,7 @@ class OAuthTokenExchangeClient:
             "grant_type": _TOKEN_EXCHANGE_GRANT,
             "subject_token_type": _JWT_TOKEN_TYPE,
             "subject_token": svid.value,
+            "requested_token_type": _ACCESS_TOKEN_TYPE,
             "resource": resource,
             "audience": audience,
             "scope": " ".join(sorted(requested_scopes)),
@@ -709,6 +711,15 @@ class BrokeredEgressProxy:
         approval_evidence: ApprovalEvidence | None = None,
         recovery_plan: RecoveryPlan | None = None,
     ) -> HarnessOperationResult:
+        if (
+            not isinstance(idempotency_key, str)
+            or not _IDEMPOTENCY_KEY.fullmatch(idempotency_key)
+        ):
+            self._deny(
+                next(iter(self._descriptors.values())),
+                "invalid-idempotency-key",
+                "invalid_idempotency_key",
+            )
         trusted_descriptor = self._descriptors.get(operation.operation_ref)
         if trusted_descriptor is None:
             self._deny(descriptor, idempotency_key, "operation_not_in_proxy_catalogue")
