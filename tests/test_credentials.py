@@ -1,7 +1,10 @@
+import tempfile
 import time
 import unittest
+from pathlib import Path
 
 from habitroute.autonomy.capabilities import HmacCapabilityBroker
+from habitroute.autonomy.ledger import SQLiteFlowJournal
 from habitroute.autonomy.credentials import (
     BrokeredEgressProxy,
     CredentialExchangeError,
@@ -9,7 +12,9 @@ from habitroute.autonomy.credentials import (
     OAuthTokenExchangeClient,
     WorkloadJWT,
 )
-from habitroute.autonomy.worker import OperationDescriptor
+from habitroute.autonomy.worker import (
+    ApprovalEvidence, OperationDescriptor, approval_request_sha256,
+)
 from habitroute.machine import (
     HarnessOperationResult,
     OperationEffect,
@@ -47,6 +52,11 @@ class FakeFormTransport:
     def post_form(self, endpoint, form):
         self.calls.append((endpoint, dict(form)))
         return self.response
+
+
+class GoodApprovalVerifier:
+    def verify(self, evidence, claims, descriptor, now):
+        return evidence.signature == "independent-approval-signature"
 
 
 class FakeUpstreamTransport:
@@ -169,6 +179,9 @@ class TokenExchangeTests(unittest.TestCase):
 
 class BrokeredEgressProxyTests(unittest.TestCase):
     def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.journal = SQLiteFlowJournal(Path(self.temp.name) / "proxy.sqlite3")
         self.capabilities = HmacCapabilityBroker(b"q" * 32)
         self.token = self.capabilities.mint_root(
             subject="spiffe://example.org/ns/habitroute/sa/worker",
@@ -204,6 +217,7 @@ class BrokeredEgressProxyTests(unittest.TestCase):
             capability_broker=self.capabilities,
             token_exchange=self.exchange,
             transport=transport or self.upstream,
+            journal=self.journal,
             audience_by_host={"api.example.test": "urn:example:api"},
             scopes_by_operation=scopes or {"repo.read": frozenset({"repo.read"})},
         )
@@ -234,6 +248,75 @@ class BrokeredEgressProxyTests(unittest.TestCase):
             proxy.invoke(
                 denied, self.operation, {},
                 idempotency_key="denied-key",
+                capability_token=self.token,
+            )
+        self.assertEqual(self.form.calls, [])
+        self.assertEqual(self.upstream.calls, [])
+
+    def test_action_approval_is_reverified_at_proxy_boundary(self):
+        protected = OperationDescriptor(
+            "repo.read", "api.example.test",
+            "https://api.example.test/v1/project",
+            external=True, method="GET", approval_required=True,
+        )
+        evidence = ApprovalEvidence(
+            self.capabilities.verify(self.token).capability_id,
+            "repo.read", "api.example.test",
+            "https://api.example.test/v1/project",
+            "operator", "approval-1", int(time.time()) + 120,
+            "a" * 64, "independent-approval-signature",
+        )
+        proxy = BrokeredEgressProxy(
+            capability_broker=self.capabilities,
+            token_exchange=self.exchange,
+            transport=self.upstream,
+            journal=self.journal,
+            audience_by_host={"api.example.test": "urn:example:api"},
+            scopes_by_operation={"repo.read": frozenset({"repo.read"})},
+            approval_verifier=GoodApprovalVerifier(),
+        )
+        with self.assertRaises(OperationNotExecuted):
+            proxy.invoke(
+                protected, self.operation, {"path": "src"},
+                idempotency_key="approved-action-key",
+                capability_token=self.token,
+                approval_evidence=evidence,
+            )
+        self.assertEqual(self.form.calls, [])
+        self.assertEqual(self.upstream.calls, [])
+
+    def test_proxy_invocation_ledger_prevents_duplicate_provider_dispatch(self):
+        proxy = self.make_proxy()
+        first = proxy.invoke(
+            self.descriptor, self.operation, {},
+            idempotency_key="proxy-single-dispatch",
+            capability_token=self.token,
+        )
+        second = proxy.invoke(
+            self.descriptor, self.operation, {},
+            idempotency_key="proxy-single-dispatch",
+            capability_token=self.token,
+        )
+        self.assertEqual(first.outcome, OperationOutcome.SUCCEEDED)
+        self.assertEqual(second.outcome, OperationOutcome.UNKNOWN)
+        self.assertEqual(len(self.upstream.calls), 1)
+        self.assertEqual(len(self.form.calls), 1)
+
+    def test_destructive_request_without_provider_snapshot_is_denied(self):
+        destructive_descriptor = OperationDescriptor(
+            "repo.read", "api.example.test",
+            "https://api.example.test/v1/project",
+            external=True, method="POST", destructive=True,
+        )
+        destructive_step = OperationStep(
+            "repo.read", OperationEffect.NON_REPEATABLE,
+            idempotency_key_supported=True,
+        )
+        proxy = self.make_proxy()
+        with self.assertRaises(OperationNotExecuted):
+            proxy.invoke(
+                destructive_descriptor, destructive_step, {},
+                idempotency_key="destructive-without-snapshot",
                 capability_token=self.token,
             )
         self.assertEqual(self.form.calls, [])
