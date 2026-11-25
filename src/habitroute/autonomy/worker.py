@@ -105,6 +105,8 @@ class EgressProxy(Protocol):
         self, descriptor: OperationDescriptor, operation: OperationStep,
         inputs: Mapping[str, str], *, idempotency_key: str,
         capability_token: CapabilityToken | str,
+        approval_evidence: ApprovalEvidence | None = None,
+        recovery_plan: "RecoveryPlan | None" = None,
     ) -> HarnessOperationResult: ...
 
 
@@ -217,6 +219,7 @@ class PolicyEnforcedHarnessAdapter:
             claims = self._broker.verify(self._token)
         except Exception as exc:
             self._deny(operation.operation_ref, idempotency_key, "capability_invalid:" + type(exc).__name__)
+        key = deterministic_idempotency_key(idempotency_key, operation.operation_ref)
         ancestors = tuple(item.capability_id for item in claims.budget_chain)
         if self._journal.is_capability_revoked(claims.capability_id, ancestors):
             self._deny(operation.operation_ref, idempotency_key, "capability_or_ancestor_revoked")
@@ -250,7 +253,7 @@ class PolicyEnforcedHarnessAdapter:
         now = int(time.time())
         recovery_plan = self._recovery.get(operation.operation_ref)
         approval_request = approval_request_sha256(
-            descriptor, operation, inputs, idempotency_key, recovery_plan,
+            descriptor, operation, inputs, key, recovery_plan,
         )
         approval = self._approvals.get(operation.operation_ref)
         approval_ok = False
@@ -283,7 +286,6 @@ class PolicyEnforcedHarnessAdapter:
         if decision.kind is not DecisionKind.ALLOW:
             self._deny(operation.operation_ref, idempotency_key, decision.reason)
 
-        key = deterministic_idempotency_key(idempotency_key, operation.operation_ref)
         input_digest = hashlib.sha256(canonical_json(dict(inputs))).hexdigest()
         try:
             claim = self._journal.claim_invocation(
@@ -313,9 +315,14 @@ class PolicyEnforcedHarnessAdapter:
                 result = self._egress.invoke(
                     descriptor, operation, inputs, idempotency_key=key,
                     capability_token=self._token,
+                    approval_evidence=approval,
+                    recovery_plan=recovery_plan,
                 )
             else:
                 result = self._inner.invoke(operation, inputs, idempotency_key=key)
+        except OperationNotExecuted:
+            self._journal.finish_invocation(key, "failed", "operation_not_executed")
+            return HarnessOperationResult(OperationOutcome.FAILED, error_code="operation_not_executed")
         except Exception as exc:
             self._journal.finish_invocation(key, "unknown", "adapter_exception:" + type(exc).__name__)
             return HarnessOperationResult(OperationOutcome.UNKNOWN, error_code="operation_outcome_unknown")
