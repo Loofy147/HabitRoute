@@ -230,14 +230,19 @@ class BrokeredEgressProxyTests(unittest.TestCase):
         )
         self.upstream = FakeUpstreamTransport()
 
-    def make_proxy(self, descriptor=None, transport=None, scopes=None, approval_verifier=None):
+    def make_proxy(
+        self, descriptor=None, transport=None, scopes=None,
+        approval_verifier=None, operation_effect=None,
+    ):
         trusted = descriptor or self.descriptor
+        effect = operation_effect or self.operation.effect
         return BrokeredEgressProxy(
             capability_broker=self.capabilities,
             token_exchange=self.exchange,
             transport=transport or self.upstream,
             journal=self.journal,
             operation_descriptors={trusted.operation_ref: trusted},
+            operation_effects={trusted.operation_ref: effect},
             audience_by_host={trusted.host: "urn:example:api"},
             scopes_by_operation=scopes or {trusted.operation_ref: frozenset({"repo.read"})},
             approval_verifier=approval_verifier,
@@ -296,6 +301,7 @@ class BrokeredEgressProxyTests(unittest.TestCase):
             transport=self.upstream,
             journal=self.journal,
             operation_descriptors={"repo.read": protected},
+            operation_effects={"repo.read": OperationEffect.READ_ONLY},
             audience_by_host={"api.example.test": "urn:example:api"},
             scopes_by_operation={"repo.read": frozenset({"repo.read"})},
             approval_verifier=GoodApprovalVerifier(),
@@ -331,6 +337,8 @@ class BrokeredEgressProxyTests(unittest.TestCase):
             token_exchange=self.exchange,
             transport=self.upstream,
             journal=self.journal,
+            operation_descriptors={"repo.read": protected},
+            operation_effects={"repo.read": OperationEffect.READ_ONLY},
             audience_by_host={"api.example.test": "urn:example:api"},
             scopes_by_operation={"repo.read": frozenset({"repo.read"})},
             approval_verifier=GoodApprovalVerifier(),
@@ -372,15 +380,32 @@ class BrokeredEgressProxyTests(unittest.TestCase):
             "https://api.example.test/v1/project",
             external=True, method="POST", destructive=False,
         )
-        proxy = self.make_proxy(descriptor=trusted)
         operation = OperationStep(
             "repo.read", OperationEffect.NON_REPEATABLE,
             idempotency_key_supported=True,
+        )
+        proxy = self.make_proxy(
+            descriptor=trusted, operation_effect=OperationEffect.NON_REPEATABLE,
         )
         with self.assertRaisesRegex(OperationNotExecuted, "untrusted_operation_descriptor"):
             proxy.invoke(
                 forged, operation, {},
                 idempotency_key="forged-destructive-flag",
+                capability_token=self.token,
+            )
+        self.assertEqual(self.form.calls, [])
+        self.assertEqual(self.upstream.calls, [])
+
+    def test_worker_cannot_downgrade_operation_effect(self):
+        proxy = self.make_proxy()
+        forged_step = OperationStep(
+            "repo.read", OperationEffect.IDEMPOTENT,
+            idempotency_key_supported=True,
+        )
+        with self.assertRaisesRegex(OperationNotExecuted, "untrusted_operation_effect"):
+            proxy.invoke(
+                self.descriptor, forged_step, {},
+                idempotency_key="forged-effect-classification",
                 capability_token=self.token,
             )
         self.assertEqual(self.form.calls, [])
@@ -396,7 +421,10 @@ class BrokeredEgressProxyTests(unittest.TestCase):
             "repo.read", OperationEffect.NON_REPEATABLE,
             idempotency_key_supported=True,
         )
-        proxy = self.make_proxy(descriptor=destructive_descriptor)
+        proxy = self.make_proxy(
+            descriptor=destructive_descriptor,
+            operation_effect=OperationEffect.NON_REPEATABLE,
+        )
         with self.assertRaises(OperationNotExecuted):
             proxy.invoke(
                 destructive_descriptor, destructive_step, {},
