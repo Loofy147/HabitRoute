@@ -248,7 +248,8 @@ class SpiffeWorkloadAPIJWTSource:
                 raise CredentialExchangeError(
                     "SPIFFE agent validated an unexpected workload identity"
                 )
-            claims = validated.claims
+            from google.protobuf.json_format import MessageToDict
+            claims = MessageToDict(validated.claims, preserving_proto_field_name=True)
             subject = claims.get("sub")
             token_audience = claims.get("aud")
             expires = claims.get("exp")
