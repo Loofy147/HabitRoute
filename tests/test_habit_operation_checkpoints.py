@@ -20,6 +20,7 @@ from habitroute.machine import (
     MachineHabitStatus,
     OperationEffect,
     OperationOutcome,
+    OperationNotExecuted,
     OperationStep,
     PerformanceProfile,
     StateCondition,
@@ -202,6 +203,44 @@ class HabitOperationCheckpointTests(unittest.TestCase):
             second_start = dict(events[3].payload)
             self.assertEqual(second_start["$meta.operation_index"], "1")
             self.assertEqual(harness.calls[1][1]["scan_result"], "clean")
+
+    def test_known_pre_dispatch_rejection_commits_failed_operation_result(self):
+        profile = harness_profile()
+        harness = StubHarness(
+            profile,
+            {"repo.scan": [OperationNotExecuted("policy_denied_before_execution")]},
+        )
+        habit = two_operation_habit(profile)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = JsonlFlowJournal(tmp)
+            flow = initial_flow(journal, "checkpoint-pre-dispatch-denied")
+            result = FlowWorker(harness, HabitRegistry((habit,))).dispatch(flow)
+
+            self.assertEqual(len(harness.calls), 1)
+            self.assertIsNone(flow.snapshot.pending_habit_operation)
+            events = journal.load("checkpoint-pre-dispatch-denied")
+            operation_events = [
+                event for event in events
+                if event.kind in (
+                    FlowEventKind.HABIT_OPERATION_STARTED,
+                    FlowEventKind.HABIT_OPERATION_FAILED,
+                    FlowEventKind.HABIT_OPERATION_UNKNOWN,
+                )
+            ]
+            self.assertEqual(
+                [event.kind for event in operation_events],
+                [
+                    FlowEventKind.HABIT_OPERATION_STARTED,
+                    FlowEventKind.HABIT_OPERATION_FAILED,
+                ],
+            )
+            self.assertEqual(
+                dict(operation_events[-1].payload)["$meta.error_code"],
+                "operation_not_executed",
+            )
+            self.assertNotEqual(result.status, DispatchStatus.NEEDS_ATTENTION)
+            self.assertNotEqual(flow.snapshot.status, FlowStatus.NEEDS_ATTENTION)
 
     def test_unacknowledged_operation_intent_is_not_replayed_after_restore(self):
         profile = harness_profile()
