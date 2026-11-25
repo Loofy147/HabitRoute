@@ -242,7 +242,12 @@ class BrokeredEgressProxyTests(unittest.TestCase):
             transport=transport or self.upstream,
             journal=self.journal,
             operation_descriptors={trusted.operation_ref: trusted},
-            operation_effects={trusted.operation_ref: effect},
+            operation_steps={
+                trusted.operation_ref: OperationStep(
+                    trusted.operation_ref, effect,
+                    idempotency_key_supported=True,
+                )
+            },
             audience_by_host={trusted.host: "urn:example:api"},
             scopes_by_operation=scopes or {trusted.operation_ref: frozenset({"repo.read"})},
             approval_verifier=approval_verifier,
@@ -301,7 +306,7 @@ class BrokeredEgressProxyTests(unittest.TestCase):
             transport=self.upstream,
             journal=self.journal,
             operation_descriptors={"repo.read": protected},
-            operation_effects={"repo.read": OperationEffect.READ_ONLY},
+            operation_steps={"repo.read": self.operation},
             audience_by_host={"api.example.test": "urn:example:api"},
             scopes_by_operation={"repo.read": frozenset({"repo.read"})},
             approval_verifier=GoodApprovalVerifier(),
@@ -338,7 +343,7 @@ class BrokeredEgressProxyTests(unittest.TestCase):
             transport=self.upstream,
             journal=self.journal,
             operation_descriptors={"repo.read": protected},
-            operation_effects={"repo.read": OperationEffect.READ_ONLY},
+            operation_steps={"repo.read": self.operation},
             audience_by_host={"api.example.test": "urn:example:api"},
             scopes_by_operation={"repo.read": frozenset({"repo.read"})},
             approval_verifier=GoodApprovalVerifier(),
@@ -402,7 +407,7 @@ class BrokeredEgressProxyTests(unittest.TestCase):
             "repo.read", OperationEffect.IDEMPOTENT,
             idempotency_key_supported=True,
         )
-        with self.assertRaisesRegex(OperationNotExecuted, "untrusted_operation_effect"):
+        with self.assertRaisesRegex(OperationNotExecuted, "untrusted_operation_step"):
             proxy.invoke(
                 self.descriptor, forged_step, {},
                 idempotency_key="forged-effect-classification",
