@@ -1,7 +1,7 @@
 """Autonomous runtime controls for HabitRoute."""
 from .capabilities import (
     MAX_CHILD_TTL_SECONDS, MAX_DELEGATION_DEPTH, BudgetGrant, CapabilityClaims,
-    CapabilityToken, DecisionKind, DelegationEdge, HmacCapabilityBroker,
+    CapabilityBroker, CapabilityVerifier, CapabilityToken, DecisionKind, DelegationEdge, HmacCapabilityBroker,
     PolicyDecision, PolicyRequest, deterministic_idempotency_key,
     evaluate_capability, validate_delegation_dag,
 )
@@ -27,7 +27,7 @@ from .runtime import TriggerEnvelope, TriggerHydration, hydrate_trigger
 
 __all__ = [
     "MAX_CHILD_TTL_SECONDS", "MAX_DELEGATION_DEPTH", "BudgetGrant", "CapabilityClaims",
-    "CapabilityToken", "DecisionKind", "DelegationEdge", "HmacCapabilityBroker",
+    "CapabilityBroker", "CapabilityVerifier", "CapabilityToken", "DecisionKind", "DelegationEdge", "HmacCapabilityBroker",
     "PolicyDecision", "PolicyRequest", "deterministic_idempotency_key",
     "evaluate_capability", "validate_delegation_dag", "CandidatePatch",
     "ControlPlaneApproval", "PromotionDecision", "ShadowReplayReport",
