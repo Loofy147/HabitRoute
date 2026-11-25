@@ -17,6 +17,7 @@ from .machine import (
     MachineHabitStatus,
     OperationEffect,
     OperationOutcome,
+    OperationNotExecuted,
     OperationStep,
     authorize_machine_habit,
     execute_machine_habit,
@@ -137,6 +138,16 @@ class FlowWorker:
             result = self.harness.invoke(
                 operation, inputs, idempotency_key=flow.idempotency_key
             )
+        except OperationNotExecuted:
+            flow.fail_step(
+                "policy_denied_before_execution",
+                metadata={
+                    "operation_ref": node.target_ref,
+                    "idempotency_key": flow.idempotency_key,
+                    "failure_class": "policy_denied_before_execution",
+                },
+            )
+            return self._result_after_transition(flow, node.node_id, "operation_not_executed")
         except Exception as exc:
             flow.mark_outcome_unknown(
                 "harness_adapter_exception",

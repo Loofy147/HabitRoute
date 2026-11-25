@@ -102,6 +102,10 @@ class HarnessProfile:
             raise ValueError("max_step_attempts must be at least one")
 
 
+class OperationNotExecuted(PermissionError):
+    """A policy rejection known to occur before any adapter side effect."""
+
+
 class OperationOutcome(str, Enum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
@@ -447,6 +451,29 @@ def execute_machine_habit(
             try:
                 observed = harness.invoke(
                     operation, inputs, idempotency_key=idempotency_key
+                )
+            except OperationNotExecuted:
+                observed = HarnessOperationResult(
+                    OperationOutcome.FAILED,
+                    error_code="operation_not_executed",
+                )
+                if on_operation_result is not None:
+                    try:
+                        on_operation_result(
+                            index, operation, idempotency_key, attempt, observed
+                        )
+                    except Exception as persist_exc:
+                        return result(
+                            MachineExecutionStatus.NEEDS_ATTENTION,
+                            "operation_result_persistence_failed:"
+                            + type(persist_exc).__name__,
+                        )
+                records.append(OperationExecutionRecord(
+                    operation.operation_ref, attempt, idempotency_key, observed.outcome,
+                    observed.duration_ms, observed.resource_units, observed.error_code,
+                ))
+                return result(
+                    MachineExecutionStatus.FAILED, "operation_not_executed",
                 )
             except Exception as exc:
                 observed = HarnessOperationResult(

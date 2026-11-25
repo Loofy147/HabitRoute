@@ -20,7 +20,16 @@ A flow owns progress. A habit owns reuse/optimization. A harness owns the execut
 - `src/habitroute/contracts.py` and `execution.py` — earlier RL-style route/option prototype retained for historical comparison; not canonical.
 - `experiments/step_savings_v1/` — preserved synthetic transition-route and step-savings experiment.
 
-The worker exists, but it is not a distributed workflow service and its multi-operation habit path does not yet commit an individual flow checkpoint for each completed operation. See [core status](docs/CORE_STATUS.md) and the [repository assessment](docs/HABITROUTE_ASSESSMENT.md).
+The worker is not a distributed workflow service. The security implementation branch is stacked on draft PR #12 (`feat/per-operation-checkpoints-v0.1`), which adds per-operation flow checkpoints for multi-operation habits. Both PRs remain unmerged to `main`; the current `main` branch should not be described as having those changes yet. See [core status](docs/CORE_STATUS.md) and the [repository assessment](docs/HABITROUTE_ASSESSMENT.md).
+
+## Autonomous runtime security
+
+- `src/habitroute/autonomy/` — scoped short-lived capability tokens, attenuated delegation with aggregate ancestor budgets, deterministic idempotency, a SQLite-backed FlowJournal with Merkle audit, immutable trigger hydration, an egress-enforcing HarnessAdapter, provider-verified recovery gates, and shadow-replay/Control Plane promotion checks.
+- [Autonomous Runtime Security Constitution](docs/AUTONOMOUS_RUNTIME_SECURITY.md) — implementation contracts, integration example and explicit trust boundaries.
+- [Production Security Adapters](docs/PRODUCTION_SECURITY_ADAPTERS.md) — production identity, credential, policy, egress, persistence, audit and recovery integrations with release gates. The branch now includes a proxy-side SPIFFE JWT-SVID/OAuth token-exchange client, a proxy-owned operation/effect catalogue (so a worker cannot relabel a destructive operation), verification-only capability authority at the enforcement boundary, action-bound approval/recovery re-verification, and a proxy-local invocation journal.
+- [Isolated Egress Lab](deploy/security-lab/compose.yaml) — executable Envoy + OPA boundary test with an agent container isolated from policy and upstream networks.
+
+This is a reference enforcement layer, not a claim that production infrastructure is already deployed. External operations fail closed without an egress proxy; explicitly destructive operations require provider-verified recovery evidence; approval and recovery evidence are re-verified at the proxy boundary; action-bound approvals include the exact input and idempotency digest. Upstream tokens are exchanged inside the proxy and are not returned to the worker. The local HMAC broker and proxy SQLite journal are reference components, not production KMS or distributed ledger services. A native SPIFFE Workload API client, deployed broker service, provider policy, asymmetric/remote capability verifier, and multi-instance transactional ledger are still deployment dependencies.
 
 ## Research and design
 
@@ -54,7 +63,7 @@ The original simulator studies 12-state and 24-state worlds, capacity-limited me
 
 ## Verification status
 
-The latest observed GitHub Actions run is [41841168040](https://github.com/Loofy147/HabitRoute/actions/runs/41841168040), on commit `43d714c8760a15026e0acb966919f483d893e7d0`, completed successfully across Python 3.11, 3.12 and 3.13. The exact test count for that run was not captured. The often-quoted 77/77 result belongs to an earlier commit and is not presented as the latest count.
+The latest observed core test matrix is [45200070030](https://github.com/Loofy147/HabitRoute/actions/runs/45200070030), on code commit `0b56d11f5e0b952ceee92a3d166768fd07b3ec30`, completed successfully across Python 3.11, 3.12 and 3.13. The Envoy + OPA integration workflow [45200069399](https://github.com/Loofy147/HabitRoute/actions/runs/45200069399) is still in progress and is not yet counted as passing. PR #18 remains a draft stacked on PR #12; neither is merged to `main`.
 
 ## Install and test
 
@@ -69,3 +78,15 @@ Python 3.11+; core modules use the standard library only. The legacy simulator t
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+
+### Run the isolated egress lab
+
+Requires Docker Engine and Docker Compose v2:
+
+```sh
+docker compose -f deploy/security-lab/compose.yaml up --build --abort-on-container-exit --exit-code-from agent
+docker compose -f deploy/security-lab/compose.yaml down --volumes --remove-orphans
+```
+
+The lab verifies an allowlist decision, denied methods/paths, and the agent's inability to contact the mock upstream, policy service, or public internet directly. It demonstrates the network Policy Enforcement Point boundary only; it does not claim production workload identity, provider credentials, or capability-token validation.
