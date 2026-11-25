@@ -210,7 +210,14 @@ class HabitOperationCheckpointTests(unittest.TestCase):
             profile,
             {"repo.scan": [OperationNotExecuted("policy_denied_before_execution")]},
         )
-        habit = two_operation_habit(profile)
+        base_habit = two_operation_habit(profile)
+        habit = replace(
+            base_habit,
+            operations=(
+                OperationStep("repo.scan", OperationEffect.NON_REPEATABLE),
+                base_habit.operations[1],
+            ),
+        )
 
         with tempfile.TemporaryDirectory() as tmp:
             journal = JsonlFlowJournal(tmp)
@@ -239,8 +246,8 @@ class HabitOperationCheckpointTests(unittest.TestCase):
                 dict(operation_events[-1].payload)["$meta.error_code"],
                 "operation_not_executed",
             )
-            self.assertNotEqual(result.status, DispatchStatus.NEEDS_ATTENTION)
-            self.assertNotEqual(flow.snapshot.status, FlowStatus.NEEDS_ATTENTION)
+            self.assertEqual(result.status, DispatchStatus.TERMINAL)
+            self.assertEqual(flow.snapshot.status, FlowStatus.FAILED)
 
     def test_unacknowledged_operation_intent_is_not_replayed_after_restore(self):
         profile = harness_profile()
