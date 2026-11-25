@@ -441,6 +441,7 @@ class BrokeredEgressProxy:
         transport: CredentialedRequestTransport,
         journal: SQLiteFlowJournal,
         operation_descriptors: Mapping[str, OperationDescriptor],
+        operation_effects: Mapping[str, OperationEffect],
         audience_by_host: Mapping[str, str],
         scopes_by_operation: Mapping[str, frozenset[str]],
         approval_required_operations: frozenset[str] = frozenset(),
@@ -452,6 +453,7 @@ class BrokeredEgressProxy:
         self._transport = transport
         self._journal = journal
         self._descriptors = dict(operation_descriptors)
+        self._effects = dict(operation_effects)
         self._audiences = {host.lower(): audience for host, audience in audience_by_host.items()}
         self._scopes = {operation: frozenset(scopes) for operation, scopes in scopes_by_operation.items()}
         self._approval_required = frozenset(approval_required_operations)
@@ -465,6 +467,8 @@ class BrokeredEgressProxy:
             raise ValueError("proxy must declare an authoritative external operation catalogue")
         if set(self._scopes) != set(self._descriptors):
             raise ValueError("proxy operation scopes must exactly match its operation catalogue")
+        if set(self._effects) != set(self._descriptors):
+            raise ValueError("proxy operation effects must exactly match its operation catalogue")
         allowed_hosts = {descriptor.host.lower() for descriptor in self._descriptors.values()}
         if not self._audiences or set(self._audiences) != allowed_hosts or any(
             not value.strip() for value in self._audiences.values()
@@ -503,6 +507,9 @@ class BrokeredEgressProxy:
         if descriptor != trusted_descriptor:
             self._deny(trusted_descriptor, idempotency_key, "untrusted_operation_descriptor")
         descriptor = trusted_descriptor
+        trusted_effect = self._effects[operation.operation_ref]
+        if operation.effect is not trusted_effect:
+            self._deny(descriptor, idempotency_key, "untrusted_operation_effect")
         if not descriptor.external:
             self._deny(descriptor, idempotency_key, "external_descriptor_required")
         if descriptor.operation_ref != operation.operation_ref:
